@@ -387,11 +387,6 @@ namespace PhantasmaPhoenix.Unity.Core
         /// <returns></returns>
         public IEnumerator GetBlockTransactionCountByHash(string blockHash, Action<int> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
         {
-            /*
-             * Preserve the legacy Unity SDK signature for existing callers.
-             * Carbon RPC now requires the chain/name parameter as well, so the compatibility
-             * overload assumes the root chain exactly like other legacy wrapper methods do.
-             */
             yield return GetBlockTransactionCountByHash(PhantasmaPhoenix.Protocol.DomainSettings.RootChainName, blockHash, callback, errorHandlingCallback, timeout, retries);
         }
 
@@ -456,18 +451,34 @@ namespace PhantasmaPhoenix.Unity.Core
         }
 
         /// <summary>
-        /// Gets a transaction by block hash and transaction index
+        /// Gets a root-chain transaction by block hash and transaction index
         /// </summary>
-        /// <param name="blockHash"></param>
-        /// <param name="index"></param>
-        /// <param name="callback"></param>
-        /// <param name="errorHandlingCallback"></param>
-        /// <returns></returns>
+        /// <param name="blockHash">Block hash.</param>
+        /// <param name="index">Transaction index within the block.</param>
+        /// <param name="callback">Callback invoked with the transaction result.</param>
+        /// <param name="errorHandlingCallback">Callback invoked on request failure.</param>
+        /// <param name="timeout">Request timeout in seconds.</param>
+        /// <param name="retries">Number of retry attempts.</param>
+        /// <returns>RPC request coroutine.</returns>
         public IEnumerator GetTransactionByBlockHashAndIndex(string blockHash, int index, Action<TransactionResult> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
         {
-            yield return WebClient.RPCRequest<TransactionResult>(Host, "getTransactionByBlockHashAndIndex", timeout, retries, errorHandlingCallback, (result) => {
-                callback(result);
-            }, blockHash, index);
+            yield return GetTransactionByBlockHashAndIndex(PhantasmaPhoenix.Protocol.DomainSettings.RootChainName, blockHash, index, callback, errorHandlingCallback, timeout, retries);
+        }
+
+        /// <summary>
+        /// Gets a transaction by chain, block hash and transaction index
+        /// </summary>
+        /// <param name="chainAddressOrName">Chain address or chain name.</param>
+        /// <param name="blockHash">Block hash.</param>
+        /// <param name="index">Transaction index within the block.</param>
+        /// <param name="callback">Callback invoked with the transaction result.</param>
+        /// <param name="errorHandlingCallback">Callback invoked on request failure.</param>
+        /// <param name="timeout">Request timeout in seconds.</param>
+        /// <param name="retries">Number of retry attempts.</param>
+        /// <returns>RPC request coroutine.</returns>
+        public IEnumerator GetTransactionByBlockHashAndIndex(string chainAddressOrName, string blockHash, int index, Action<TransactionResult> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
+        {
+            yield return RpcRequest("getTransactionByBlockHashAndIndex", callback, errorHandlingCallback, timeout, retries, chainAddressOrName, blockHash, index);
         }
         #endregion
 

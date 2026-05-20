@@ -274,7 +274,7 @@ public class PhantasmaApiRpcShapeTests
     }
 
     [Test]
-    public void GetBlockTransactionCountByHash_WithChainParameter_UsesUpdatedSignature()
+    public void GetBlockTransactionCountByHash_WithChainParameter_SendsChainAndBlockHash()
     {
         var api = new CapturingPhantasmaApi
         {
@@ -289,7 +289,7 @@ public class PhantasmaApiRpcShapeTests
     }
 
     [Test]
-    public void GetBlockTransactionCountByHash_LegacySignatureStillTargetsRootChain()
+    public void GetBlockTransactionCountByHash_WithoutChainParameter_SendsRootChainAndBlockHash()
     {
         var api = new CapturingPhantasmaApi
         {
@@ -301,5 +301,35 @@ public class PhantasmaApiRpcShapeTests
 
         Assert.That(callbackResult, Is.EqualTo(3));
         AssertCall(api, "getBlockTransactionCountByHash", "main", "ABCDEF0123456789");
+    }
+
+    [Test]
+    public void GetTransactionByBlockHashAndIndex_WithChainParameter_SendsChainBlockHashAndIndex()
+    {
+        var api = new CapturingPhantasmaApi
+        {
+            NextResult = new TransactionResult()
+        };
+        var callbackInvoked = false;
+
+        RunCoroutine(api.GetTransactionByBlockHashAndIndex("main", "ABCDEF0123456789", 2, _ => callbackInvoked = true));
+
+        Assert.That(callbackInvoked, Is.True);
+        AssertCall(api, "getTransactionByBlockHashAndIndex", "main", "ABCDEF0123456789", 2);
+    }
+
+    [Test]
+    public void GetTransactionByBlockHashAndIndex_WithoutChainParameter_SendsRootChainBlockHashAndIndex()
+    {
+        var api = new CapturingPhantasmaApi
+        {
+            NextResult = new TransactionResult()
+        };
+        var callbackInvoked = false;
+
+        RunCoroutine(api.GetTransactionByBlockHashAndIndex("ABCDEF0123456789", 2, _ => callbackInvoked = true));
+
+        Assert.That(callbackInvoked, Is.True);
+        AssertCall(api, "getTransactionByBlockHashAndIndex", "main", "ABCDEF0123456789", 2);
     }
 }

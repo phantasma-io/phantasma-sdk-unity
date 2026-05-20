@@ -88,8 +88,8 @@ public class WalletInteractions : MonoBehaviour
     /// <summary>
     /// Get the transaction by hash. 
     /// </summary>
-    /// <param name="hash"></param>
-    /// <param name="callback"></param>
+    /// <param name="hash">Transaction hash text.</param>
+    /// <param name="callback">Callback invoked with transaction data.</param>
     public void GetTransaction(string hash, Action<TransactionResult> callback)
     {
         if (!PhantasmaLinkClient.Instance.IsLogged)

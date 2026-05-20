@@ -140,14 +140,14 @@ public class PhantasmaLinkClient : MonoBehaviour
     /// <summary>
     /// Set the Message to the OnInfo
     /// </summary>
-    /// <param name="txt"></param>
+    /// <param name="txt">Message text emitted through <see cref="OnInfo"/>.</param>
     private void SetMessage(string txt) => OnInfo?.Invoke(txt);
 
     #region Requests Functions
     /// <summary>
     /// Fetch account info
     /// </summary>
-    /// <param name="callback"></param>
+    /// <param name="callback">Callback invoked with success flag and status message after account data is fetched.</param>
     private void FetchAccount(Action<bool, string> callback)
     {
         SetMessage("Authorized, obtaining account info...");
@@ -201,8 +201,8 @@ public class PhantasmaLinkClient : MonoBehaviour
     /// <summary>
     /// Send Link Request
     /// </summary>
-    /// <param name="request"></param>
-    /// <param name="callback"></param>
+    /// <param name="request">Wallet link request path without the numeric request ID prefix.</param>
+    /// <param name="callback">Callback invoked with the JSON wallet response for this request ID.</param>
     private async void SendLinkRequest(string request, Action<JObject> callback)
     {
         if (!request.Contains("authorize"))
@@ -323,8 +323,8 @@ public class PhantasmaLinkClient : MonoBehaviour
     /// <summary>
     /// Get Balance for specific symbol
     /// </summary>
-    /// <param name="symbol"></param>
-    /// <returns></returns>
+    /// <param name="symbol">Token symbol to read from the cached wallet balance map.</param>
+    /// <returns>Human-readable token balance, or zero when the symbol is not present.</returns>
     public decimal GetBalance(string symbol)
     {
         if (_balanceMap.ContainsKey(symbol))
@@ -339,8 +339,8 @@ public class PhantasmaLinkClient : MonoBehaviour
     /// <summary>
     /// Returns the NFTs IDs for a specific symbol
     /// </summary>
-    /// <param name="symbol"></param>
-    /// <returns></returns>
+    /// <param name="symbol">NFT symbol to read from the cached wallet ownership map.</param>
+    /// <returns>Owned NFT ID strings for the symbol, or an empty array when none are cached.</returns>
     public string[] GetNFTs(string symbol)
     {
         if (_ownershipMap.ContainsKey(symbol))
@@ -355,7 +355,7 @@ public class PhantasmaLinkClient : MonoBehaviour
     /// <summary>
     /// Login to the Dapp
     /// </summary>
-    /// <param name="callback"></param>
+    /// <param name="callback">Callback invoked with success flag and status message after authorization and account loading.</param>
     public void Login(Action<bool, string> callback = null)
     {
         if (string.IsNullOrEmpty(this.Nexus))
@@ -398,7 +398,7 @@ public class PhantasmaLinkClient : MonoBehaviour
     /// <summary>
     /// To Reload the account info
     /// </summary>
-    /// <param name="callback"></param>
+    /// <param name="callback">Callback invoked with success flag and status message after account data is reloaded.</param>
     public void ReloadAccount(Action<bool, string> callback = null)
     {
         FetchAccount(callback);
@@ -407,7 +407,6 @@ public class PhantasmaLinkClient : MonoBehaviour
     /// <summary>
     /// Logout from the Dapp
     /// </summary>
-    /// <param name="callback">returns a bool</param>
     public void Logout()
     {
         this.Nexus = null;
@@ -423,10 +422,12 @@ public class PhantasmaLinkClient : MonoBehaviour
     /// <summary>
     /// Send Transaction.
     /// </summary>
-    /// <param name="chain"></param>
-    /// <param name="script"></param>
-    /// <param name="payload"></param>
-    /// <param name="callback"></param>
+    /// <param name="chain">Target chain name.</param>
+    /// <param name="script">VM script bytes to submit to the wallet for signing.</param>
+    /// <param name="payload">Optional transaction payload bytes.</param>
+    /// <param name="callback">Callback invoked with transaction hash on success, or <see cref="Hash.Null"/> and an error message on failure.</param>
+    /// <param name="platform">Wallet platform used for signing.</param>
+    /// <param name="signature">Signature algorithm requested from the wallet.</param>
     public void SendTransaction(string chain, byte[] script, byte[] payload, Action<Hash, string> callback = null, PlatformKind platform = PlatformKind.Phantasma, SignatureKind signature = SignatureKind.Ed25519)
     {
         SetMessage("Relaying transaction...");
@@ -467,12 +468,12 @@ public class PhantasmaLinkClient : MonoBehaviour
     }
 
     /// <summary>
-    /// To signed some type of data
+    /// Requests a wallet signature for UTF-8 text data.
     /// </summary>
-    /// <param name="data">String with the data you want to sign</param>
-    /// <param name="callback"></param>
-    /// <param name="platform"></param>
-    /// <param name="signature"></param>
+    /// <param name="data">Text data to encode as UTF-8 and sign.</param>
+    /// <param name="callback">Callback invoked with success flag, signature or error message, wallet random value, and hex-encoded data.</param>
+    /// <param name="platform">Wallet platform used for signing.</param>
+    /// <param name="signature">Signature algorithm requested from the wallet.</param>
     public void SignData(string data, Action<bool, string, string, string> callback = null, PlatformKind platform = PlatformKind.Phantasma, SignatureKind signature = SignatureKind.Ed25519)
     {
         if (!Enabled)

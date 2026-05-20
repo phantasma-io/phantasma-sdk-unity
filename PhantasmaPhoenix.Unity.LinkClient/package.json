@@ -9,6 +9,11 @@
     "email": "info@phantasma.info",
     "url": "https://phantasma.info"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/phantasma-io/phantasma-sdk-unity.git",
+    "directory": "PhantasmaPhoenix.Unity.LinkClient"
+  },
   "keywords": [
     "android",
     "Blockchain",

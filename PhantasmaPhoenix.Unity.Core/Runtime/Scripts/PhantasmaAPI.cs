@@ -549,6 +549,36 @@ namespace PhantasmaPhoenix.Unity.Core
 
         #region Chain
         /// <summary>
+        /// Gets chain information for the root chain.
+        /// <para><b>⚠️ Currently disabled - this functionality is not available and will be re-enabled according to the roadmap: https://phantasma.info/blockchain#roadmap</b></para>
+        /// </summary>
+        /// <param name="callback">Callback invoked with chain metadata.</param>
+        /// <param name="errorHandlingCallback">Callback invoked with SDK error type and message when the request fails.</param>
+        /// <param name="timeout">Request timeout in seconds.</param>
+        /// <param name="retries">Number of retry attempts.</param>
+        /// <returns>Coroutine that requests root chain metadata.</returns>
+        public IEnumerator GetChain(Action<ChainResult> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
+        {
+            yield return GetChain(PhantasmaPhoenix.Protocol.DomainSettings.RootChainName, true, callback, errorHandlingCallback, timeout, retries);
+        }
+
+        /// <summary>
+        /// Gets chain information by chain name.
+        /// <para><b>⚠️ Currently disabled - this functionality is not available and will be re-enabled according to the roadmap: https://phantasma.info/blockchain#roadmap</b></para>
+        /// </summary>
+        /// <param name="name">Chain name.</param>
+        /// <param name="extended">True to request extended chain metadata.</param>
+        /// <param name="callback">Callback invoked with chain metadata.</param>
+        /// <param name="errorHandlingCallback">Callback invoked with SDK error type and message when the request fails.</param>
+        /// <param name="timeout">Request timeout in seconds.</param>
+        /// <param name="retries">Number of retry attempts.</param>
+        /// <returns>Coroutine that requests chain metadata.</returns>
+        public IEnumerator GetChain(string name, bool extended, Action<ChainResult> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
+        {
+            yield return RpcRequest("getChain", callback, errorHandlingCallback, timeout, retries, name, extended);
+        }
+
+        /// <summary>
         /// Gets an array of all chains deployed on Phantasma
         /// <para><b>⚠️ Currently disabled - this functionality is not available and will be re-enabled according to the roadmap: https://phantasma.info/blockchain#roadmap</b></para>
         /// </summary>
@@ -1066,10 +1096,10 @@ namespace PhantasmaPhoenix.Unity.Core
         /// <returns>Coroutine that broadcasts a transaction.</returns>
         public IEnumerator SendRawTransaction(string txData, Hash txHash, Action<string, string, Hash> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
         {
-            yield return WebClient.RPCRequest<string>(Host, "sendRawTransaction", timeout, retries, errorHandlingCallback, (result) =>
+            yield return RpcRequest("sendRawTransaction", (string result) =>
             {
                 callback(result, txData, txHash);
-            }, txData);
+            }, errorHandlingCallback, timeout, retries, txData);
         }
 
         /// <summary>
@@ -1083,10 +1113,10 @@ namespace PhantasmaPhoenix.Unity.Core
         /// <returns>Coroutine that broadcasts a Carbon transaction.</returns>
         public IEnumerator SendCarbonTransaction(string txData, Action<string, string> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
         {
-            yield return WebClient.RPCRequest<string>(Host, "sendCarbonTransaction", timeout, retries, errorHandlingCallback, (result) =>
+            yield return RpcRequest("sendCarbonTransaction", (string result) =>
             {
                 callback(result, txData);
-            }, txData);
+            }, errorHandlingCallback, timeout, retries, txData);
         }
 
         /// <summary>
@@ -1197,7 +1227,8 @@ namespace PhantasmaPhoenix.Unity.Core
         /// <returns>Coroutine that builds, signs, broadcasts, and verifies a transaction.</returns>
         public IEnumerator SignAndSendTransaction(IKeyPair keys, string nexus, byte[] script, string chain, string payload, Action<string /*tx hash*/, string /*encoded tx*/> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
         {
-            return SignAndSendTransaction(keys, nexus, script, chain, Encoding.UTF8.GetBytes(payload), callback, errorHandlingCallback, null, timeout, retries);
+            var payloadBytes = string.IsNullOrEmpty(payload) ? Array.Empty<byte>() : Encoding.UTF8.GetBytes(payload);
+            return SignAndSendTransaction(keys, nexus, script, chain, payloadBytes, callback, errorHandlingCallback, null, timeout, retries);
         }
 
         /// <summary>
@@ -1218,29 +1249,24 @@ namespace PhantasmaPhoenix.Unity.Core
         {
             Log.Write("Sending transaction... script size: " + script.Length);
 
-            var tx = new PhantasmaPhoenix.Protocol.Transaction(nexus, chain, script, DateTime.UtcNow + TimeSpan.FromMinutes(20), payload);
+            var tx = new PhantasmaPhoenix.Protocol.Transaction(nexus, chain, script, DateTime.UtcNow + TimeSpan.FromMinutes(20), payload ?? Array.Empty<byte>());
 
             // Local hash we expect to see on the node
             Hash txHash = tx.Sign(keys, customSignFunction);
 
             var encoded = Base16.Encode(tx.ToByteArray(true));
 
-            // Wrap user callback to validate RPC hash before signaling success
-            Action<string, string, Hash> wrappedCallback = (hashText, encodedTx, rpcHash) =>
+            Action<string, string, Hash> wrappedCallback = (hashText, encodedTx, expectedHash) =>
             {
-                // Prefer comparing Hash structs if both are available
-                if (rpcHash != txHash)
+                if (hashText != expectedHash.ToString())
                 {
-                    // Treat mismatch as an error and do not invoke success callback
-                    errorHandlingCallback?.Invoke(EPHANTASMA_SDK_ERROR_TYPE.API_ERROR, $"RPC returned different hash {rpcHash}, expected {txHash}");
+                    errorHandlingCallback?.Invoke(EPHANTASMA_SDK_ERROR_TYPE.API_ERROR, $"RPC returned different hash {hashText}, expected {expectedHash}");
                     return;
                 }
 
-                // Hashes match - forward original callback
                 callback?.Invoke(hashText, encodedTx);
             };
 
-            // Send to network and validate on callback
             yield return SendRawTransaction(encoded, txHash, wrappedCallback, errorHandlingCallback, timeout, retries);
         }
 

@@ -1,11 +1,12 @@
 using System;
 using System.Collections;
 using NUnit.Framework;
+using PhantasmaPhoenix.Cryptography;
 using PhantasmaPhoenix.RPC.Models;
 using PhantasmaPhoenix.RPC.Types;
 using PhantasmaPhoenix.Unity.Core;
 
-public class PhantasmaApiRpcShapeTests
+public class PhantasmaApiRpcRequestTests
 {
     private sealed class CapturingPhantasmaApi : PhantasmaAPI
     {
@@ -51,6 +52,108 @@ public class PhantasmaApiRpcShapeTests
     {
         Assert.That(api.LastMethod, Is.EqualTo(expectedMethod));
         Assert.That(api.LastParameters, Is.EqualTo(expectedParameters));
+    }
+
+    private static PhantasmaKeys CreateDeterministicKeys()
+    {
+        var privateKey = new byte[PhantasmaKeys.PrivateKeyLength];
+        for (var i = 0; i < privateKey.Length; i++)
+        {
+            privateKey[i] = (byte)(i + 1);
+        }
+
+        return new PhantasmaKeys(privateKey);
+    }
+
+    [Test]
+    public void RpcResponseDecoder_WithMatchingId_ReturnsResult()
+    {
+        var ok = WebClient.TryDecodeRpcResponse<string>(
+            "{\"jsonrpc\":\"2.0\",\"id\":\"request-1\",\"result\":\"done\"}",
+            "request-1",
+            out var result,
+            out _,
+            out var errorMessage);
+
+        Assert.That(ok, Is.True);
+        Assert.That(result, Is.EqualTo("done"));
+        Assert.That(errorMessage, Is.Null);
+    }
+
+    [Test]
+    public void RpcResponseDecoder_WithoutId_ReportsMalformedResponse()
+    {
+        var ok = WebClient.TryDecodeRpcResponse<string>(
+            "{\"jsonrpc\":\"2.0\",\"result\":\"done\"}",
+            "request-1",
+            out _,
+            out var errorType,
+            out var errorMessage);
+
+        Assert.That(ok, Is.False);
+        Assert.That(errorType, Is.EqualTo(EPHANTASMA_SDK_ERROR_TYPE.MALFORMED_RESPONSE));
+        Assert.That(errorMessage, Does.Contain("Missing response id"));
+    }
+
+    [Test]
+    public void RpcResponseDecoder_WithDifferentId_ReportsMalformedResponse()
+    {
+        var ok = WebClient.TryDecodeRpcResponse<string>(
+            "{\"jsonrpc\":\"2.0\",\"id\":\"other-request\",\"result\":\"done\"}",
+            "request-1",
+            out _,
+            out var errorType,
+            out var errorMessage);
+
+        Assert.That(ok, Is.False);
+        Assert.That(errorType, Is.EqualTo(EPHANTASMA_SDK_ERROR_TYPE.MALFORMED_RESPONSE));
+        Assert.That(errorMessage, Does.Contain("Response id mismatch"));
+    }
+
+    [Test]
+    public void RpcResponseDecoder_WithDifferentIdAndRpcError_ReportsIdMismatch()
+    {
+        var ok = WebClient.TryDecodeRpcResponse<string>(
+            "{\"jsonrpc\":\"2.0\",\"id\":\"other-request\",\"error\":{\"code\":-32603,\"message\":\"Execution failed\"}}",
+            "request-1",
+            out _,
+            out var errorType,
+            out var errorMessage);
+
+        Assert.That(ok, Is.False);
+        Assert.That(errorType, Is.EqualTo(EPHANTASMA_SDK_ERROR_TYPE.MALFORMED_RESPONSE));
+        Assert.That(errorMessage, Does.Contain("Response id mismatch"));
+        Assert.That(errorMessage, Does.Not.Contain("Execution failed"));
+    }
+
+    [Test]
+    public void RpcResponseDecoder_WithWrongIdType_ReportsMalformedResponse()
+    {
+        var ok = WebClient.TryDecodeRpcResponse<string>(
+            "{\"jsonrpc\":\"2.0\",\"id\":{\"bad\":\"id\"},\"result\":\"done\"}",
+            "request-1",
+            out _,
+            out var errorType,
+            out var errorMessage);
+
+        Assert.That(ok, Is.False);
+        Assert.That(errorType, Is.EqualTo(EPHANTASMA_SDK_ERROR_TYPE.MALFORMED_RESPONSE));
+        Assert.That(errorMessage, Does.Contain("JSON-RPC id must be a string, integer, or null"));
+    }
+
+    [Test]
+    public void RpcResponseDecoder_WithoutResult_ReportsMalformedResponse()
+    {
+        var ok = WebClient.TryDecodeRpcResponse<string>(
+            "{\"jsonrpc\":\"2.0\",\"id\":\"request-1\"}",
+            "request-1",
+            out _,
+            out var errorType,
+            out var errorMessage);
+
+        Assert.That(ok, Is.False);
+        Assert.That(errorType, Is.EqualTo(EPHANTASMA_SDK_ERROR_TYPE.MALFORMED_RESPONSE));
+        Assert.That(errorMessage, Does.Contain("Missing response result"));
     }
 
     [Test]
@@ -304,6 +407,36 @@ public class PhantasmaApiRpcShapeTests
     }
 
     [Test]
+    public void GetChain_WithoutParameters_SendsRootChainAndExtendedFlag()
+    {
+        var api = new CapturingPhantasmaApi
+        {
+            NextResult = new ChainResult()
+        };
+        var callbackInvoked = false;
+
+        RunCoroutine(api.GetChain(_ => callbackInvoked = true));
+
+        Assert.That(callbackInvoked, Is.True);
+        AssertCall(api, "getChain", "main", true);
+    }
+
+    [Test]
+    public void GetChain_WithParameters_SendsNameAndExtendedFlag()
+    {
+        var api = new CapturingPhantasmaApi
+        {
+            NextResult = new ChainResult()
+        };
+        var callbackInvoked = false;
+
+        RunCoroutine(api.GetChain("main", false, _ => callbackInvoked = true));
+
+        Assert.That(callbackInvoked, Is.True);
+        AssertCall(api, "getChain", "main", false);
+    }
+
+    [Test]
     public void GetTransactionByBlockHashAndIndex_WithChainParameter_SendsChainBlockHashAndIndex()
     {
         var api = new CapturingPhantasmaApi
@@ -331,5 +464,81 @@ public class PhantasmaApiRpcShapeTests
 
         Assert.That(callbackInvoked, Is.True);
         AssertCall(api, "getTransactionByBlockHashAndIndex", "main", "ABCDEF0123456789", 2);
+    }
+
+    [Test]
+    public void SignAndSendTransaction_WhenRpcHashDiffers_ReportsApiError()
+    {
+        var api = new CapturingPhantasmaApi
+        {
+            NextResult = "DIFFERENT_HASH"
+        };
+        var keys = CreateDeterministicKeys();
+        var successInvoked = false;
+        EPHANTASMA_SDK_ERROR_TYPE? errorType = null;
+        string errorMessage = null;
+
+        RunCoroutine(api.SignAndSendTransaction(
+            keys,
+            "mainnet",
+            Array.Empty<byte>(),
+            "main",
+            Array.Empty<byte>(),
+            (_, _) => successInvoked = true,
+            (type, message) =>
+            {
+                errorType = type;
+                errorMessage = message;
+            }));
+
+        Assert.That(successInvoked, Is.False);
+        Assert.That(errorType, Is.EqualTo(EPHANTASMA_SDK_ERROR_TYPE.API_ERROR));
+        Assert.That(errorMessage, Does.Contain("DIFFERENT_HASH"));
+    }
+
+    [Test]
+    public void SignAndSendTransaction_WithNullStringPayload_ReachesBroadcast()
+    {
+        var api = new CapturingPhantasmaApi
+        {
+            NextResult = "DIFFERENT_HASH"
+        };
+        var keys = CreateDeterministicKeys();
+
+        RunCoroutine(api.SignAndSendTransaction(
+            keys,
+            "mainnet",
+            Array.Empty<byte>(),
+            "main",
+            (string)null,
+            (_, _) => { },
+            (_, _) => { }));
+
+        Assert.That(api.LastMethod, Is.EqualTo("sendRawTransaction"));
+        Assert.That(api.LastParameters, Has.Length.EqualTo(1));
+        Assert.That(api.LastParameters[0], Is.TypeOf<string>());
+    }
+
+    [Test]
+    public void SignAndSendTransaction_WithNullBinaryPayload_ReachesBroadcast()
+    {
+        var api = new CapturingPhantasmaApi
+        {
+            NextResult = "DIFFERENT_HASH"
+        };
+        var keys = CreateDeterministicKeys();
+
+        RunCoroutine(api.SignAndSendTransaction(
+            keys,
+            "mainnet",
+            Array.Empty<byte>(),
+            "main",
+            (byte[])null,
+            (_, _) => { },
+            (_, _) => { }));
+
+        Assert.That(api.LastMethod, Is.EqualTo("sendRawTransaction"));
+        Assert.That(api.LastParameters, Has.Length.EqualTo(1));
+        Assert.That(api.LastParameters[0], Is.TypeOf<string>());
     }
 }

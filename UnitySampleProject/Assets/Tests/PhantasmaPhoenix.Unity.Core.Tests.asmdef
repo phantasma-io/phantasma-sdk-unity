@@ -4,6 +4,7 @@
     "PhantasmaPhoenix.Unity.Core"
   ],
   "precompiledReferences": [
+    "PhantasmaPhoenix.Cryptography.dll",
     "PhantasmaPhoenix.RPC.dll"
   ],
   "optionalUnityReferences": [

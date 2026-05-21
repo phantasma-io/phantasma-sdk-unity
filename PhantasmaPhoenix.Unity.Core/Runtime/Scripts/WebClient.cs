@@ -2,9 +2,15 @@ using System;
 using System.Collections;
 using UnityEngine.Networking;
 using System.Text;
+using System.Runtime.CompilerServices;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
+using Newtonsoft.Json.Linq;
+using Newtonsoft.Json.Serialization;
 using UnityEngine;
 using PhantasmaPhoenix.Unity.Core.Logging;
+
+[assembly: InternalsVisibleTo("PhantasmaPhoenix.Unity.Core.Tests")]
 
 namespace PhantasmaPhoenix.Unity.Core
 {
@@ -12,6 +18,14 @@ namespace PhantasmaPhoenix.Unity.Core
     {
         public const int DefaultTimeout = 0;
         public const int DefaultRetries = 0;
+        private static readonly JsonSerializerSettings JsonSerializerSettings = new JsonSerializerSettings
+        {
+            ContractResolver = new DefaultContractResolver { NamingStrategy = new DefaultNamingStrategy() },
+            NullValueHandling = NullValueHandling.Ignore,
+            MissingMemberHandling = MissingMemberHandling.Ignore,
+            Converters = { new StringEnumConverter(new DefaultNamingStrategy(), allowIntegerValues: true) }
+        };
+        private static readonly JsonSerializer NewtonsoftJsonSerializer = JsonSerializer.Create(JsonSerializerSettings);
         private static long requestNumber = 0;
         private static object requestNumberLock = new object();
         private static long GetNextRequestNumber()
@@ -77,7 +91,7 @@ namespace PhantasmaPhoenix.Unity.Core
         {
             try
             {
-                return JsonConvert.DeserializeObject<JsonRpcResponse<object>>(json)?.error;
+                return JsonConvert.DeserializeObject<JsonRpcResponse<object>>(json, JsonSerializerSettings)?.error;
             }
             catch { return null; }
         }
@@ -89,7 +103,78 @@ namespace PhantasmaPhoenix.Unity.Core
                 return (T)(object)response;
             }
 
-            return JsonConvert.DeserializeObject<T>(response);
+            return JsonConvert.DeserializeObject<T>(response, JsonSerializerSettings);
+        }
+
+        internal static bool TryDecodeRpcResponse<T>(string response, string expectedRequestId, out T result, out EPHANTASMA_SDK_ERROR_TYPE errorType, out string errorMessage)
+        {
+            result = default;
+            errorType = EPHANTASMA_SDK_ERROR_TYPE.MALFORMED_RESPONSE;
+            errorMessage = null;
+
+            JObject envelope;
+            try
+            {
+                envelope = JObject.Parse(response);
+            }
+            catch (Exception e)
+            {
+                errorType = EPHANTASMA_SDK_ERROR_TYPE.FAILED_PARSING_JSON;
+                errorMessage = "Failed to parse RPC response: \"" + e.Message + "\"";
+                return false;
+            }
+
+            var idToken = envelope["id"];
+            if (idToken == null || idToken.Type == JTokenType.Null)
+            {
+                errorMessage = $"Missing response id for request {expectedRequestId}";
+                return false;
+            }
+
+            if (idToken.Type != JTokenType.String && idToken.Type != JTokenType.Integer)
+            {
+                errorMessage = $"JSON-RPC id must be a string, integer, or null, got {idToken.Type}";
+                return false;
+            }
+
+            if (idToken.Type != JTokenType.String || idToken.Value<string>() != expectedRequestId)
+            {
+                errorMessage = $"Response id mismatch: got {idToken.ToString(Formatting.None)}, expected {expectedRequestId}";
+                return false;
+            }
+
+            var errorToken = envelope["error"];
+            if (errorToken != null && errorToken.Type != JTokenType.Null)
+            {
+                var rpcError = errorToken.ToObject<JsonRpcError>(NewtonsoftJsonSerializer);
+                errorType = EPHANTASMA_SDK_ERROR_TYPE.API_ERROR;
+                errorMessage = rpcError?.message ?? "RPC error";
+                return false;
+            }
+
+            if (!envelope.ContainsKey("result"))
+            {
+                errorMessage = "Missing response result";
+                return false;
+            }
+
+            var resultToken = envelope["result"];
+            if (resultToken == null || resultToken.Type == JTokenType.Null)
+            {
+                return true;
+            }
+
+            try
+            {
+                result = resultToken.ToObject<T>(NewtonsoftJsonSerializer);
+                return true;
+            }
+            catch (Exception e)
+            {
+                errorType = EPHANTASMA_SDK_ERROR_TYPE.FAILED_PARSING_JSON;
+                errorMessage = "Failed to parse RPC response: \"" + e.Message + "\"";
+                return false;
+            }
         }
 
         public static IEnumerator RPCRequest<T>(string url, string method, int timeout, int retriesOnNetworkError, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback,
@@ -97,7 +182,7 @@ namespace PhantasmaPhoenix.Unity.Core
         {
             var requestNumber = GetNextRequestNumber().ToString();
             var rpcRequest = new JsonRpcRequest(method, parameters, requestNumber);
-            var json = JsonConvert.SerializeObject(rpcRequest);
+            var json = JsonConvert.SerializeObject(rpcRequest, JsonSerializerSettings);
             var paramCount = parameters?.Length ?? 0;
 
             byte[] bodyRaw = Encoding.UTF8.GetBytes(json);
@@ -156,22 +241,14 @@ namespace PhantasmaPhoenix.Unity.Core
 
                 try
                 {
-                    var rpcResponse = JsonConvert.DeserializeObject<JsonRpcResponse<T>>(response);
-                    if (rpcResponse != null && rpcResponse.result != null && rpcResponse.error == null)
+                    if (TryDecodeRpcResponse<T>(response, requestNumber, out var decodedResult, out var errorType, out var errorMessage))
                     {
-                        callback?.Invoke(rpcResponse.result);
+                        callback?.Invoke(decodedResult);
                     }
                     else
                     {
-                        if (rpcResponse?.error != null)
-                        {
-                            Log.Write($"RPC response [{requestNumber}]\nurl: {url}\nError node found: {rpcResponse.error.message}", Log.Level.Networking);
-                            errorHandlingCallback?.Invoke(EPHANTASMA_SDK_ERROR_TYPE.API_ERROR, rpcResponse.error.message);
-                        }
-                        else
-                        {
-                            errorHandlingCallback?.Invoke(EPHANTASMA_SDK_ERROR_TYPE.FAILED_PARSING_JSON, "Invalid or null response");
-                        }
+                        Log.Write($"RPC response [{requestNumber}]\nurl: {url}\nInvalid JSON-RPC response: {errorMessage}", Log.Level.Networking);
+                        errorHandlingCallback?.Invoke(errorType, errorMessage);
                     }
                 }
                 catch (Exception e)

@@ -684,25 +684,7 @@ namespace PhantasmaPhoenix.Unity.Core
         
         #region Organization
         /// <summary>
-        /// Gets organization data by id
-        /// <para><b>⚠️ Currently disabled - this functionality is not available and will be re-enabled according to the roadmap: https://phantasma.info/blockchain#roadmap</b></para>
-        /// </summary>
-        /// <param name="ID">Organization ID.</param>
-        /// <param name="callback">Callback invoked with organization data.</param>
-        /// <param name="errorHandlingCallback">Callback invoked with SDK error type and message when the request fails.</param>
-        /// <param name="timeout">Request timeout in seconds.</param>
-        /// <param name="retries">Number of retry attempts.</param>
-        /// <returns>Coroutine that requests organization data by ID.</returns>
-        public IEnumerator GetOrganization(string ID, Action<OrganizationResult> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
-        {
-            yield return WebClient.RPCRequest<OrganizationResult>(Host, "getOrganization", timeout, retries, errorHandlingCallback, (result) => {
-                callback(result);
-            }, ID);
-        }
-        
-        /// <summary>
-        /// Gets organization data by name
-        /// <para><b>⚠️ Currently disabled - this functionality is not available and will be re-enabled according to the roadmap: https://phantasma.info/blockchain#roadmap</b></para>
+        /// Gets organization data by registered name.
         /// </summary>
         /// <param name="name">Organization name.</param>
         /// <param name="callback">Callback invoked with organization data.</param>
@@ -710,27 +692,87 @@ namespace PhantasmaPhoenix.Unity.Core
         /// <param name="timeout">Request timeout in seconds.</param>
         /// <param name="retries">Number of retry attempts.</param>
         /// <returns>Coroutine that requests organization data by name.</returns>
-        public IEnumerator GetOrganizationByName(string name, Action<OrganizationResult> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
+        public IEnumerator GetOrganization(string name, Action<OrganizationResult> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
         {
-            yield return WebClient.RPCRequest<OrganizationResult>(Host, "getOrganizationByName", timeout, retries, errorHandlingCallback, (result) => {
-                callback(result);
-            }, name);
+            yield return GetOrganization(name, false, callback, errorHandlingCallback, timeout, retries);
+        }
+
+        /// <summary>
+        /// Gets organization data by registered name.
+        /// </summary>
+        /// <param name="name">Organization name.</param>
+        /// <param name="includeMemberCount">True to include member count in the response.</param>
+        /// <param name="callback">Callback invoked with organization data.</param>
+        /// <param name="errorHandlingCallback">Callback invoked with SDK error type and message when the request fails.</param>
+        /// <param name="timeout">Request timeout in seconds.</param>
+        /// <param name="retries">Number of retry attempts.</param>
+        /// <returns>Coroutine that requests organization data by name.</returns>
+        public IEnumerator GetOrganization(string name, bool includeMemberCount, Action<OrganizationResult> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
+        {
+            yield return RpcRequest("getOrganization", callback, errorHandlingCallback, timeout, retries, name, includeMemberCount);
         }
         
         /// <summary>
-        /// Gets all organizations deployed on Phantasma
-        /// <para><b>⚠️ Currently disabled - this functionality is not available and will be re-enabled according to the roadmap: https://phantasma.info/blockchain#roadmap</b></para>
+        /// Gets organizations with cursor pagination.
         /// </summary>
         /// <param name="callback">Callback invoked with organization data.</param>
         /// <param name="errorHandlingCallback">Callback invoked with SDK error type and message when the request fails.</param>
         /// <param name="timeout">Request timeout in seconds.</param>
         /// <param name="retries">Number of retry attempts.</param>
-        /// <returns>Coroutine that requests all organizations.</returns>
-        public IEnumerator GetOrganizations(Action<OrganizationResult[]> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
+        /// <returns>Coroutine that requests organizations.</returns>
+        public IEnumerator GetOrganizations(Action<CursorPaginatedResult<OrganizationResult[]>> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
         {
-            yield return WebClient.RPCRequest<OrganizationResult[]>(Host, "getOrganizations", timeout, retries, errorHandlingCallback, (result) => {
-                callback(result);
-            });
+            yield return GetOrganizations(10, "", false, callback, errorHandlingCallback, timeout, retries);
+        }
+
+        /// <summary>
+        /// Gets organizations with cursor pagination.
+        /// </summary>
+        /// <param name="pageSize">Maximum number of organizations to return.</param>
+        /// <param name="cursor">Pagination cursor.</param>
+        /// <param name="includeMemberCount">True to include member count in each organization.</param>
+        /// <param name="callback">Callback invoked with organization data.</param>
+        /// <param name="errorHandlingCallback">Callback invoked with SDK error type and message when the request fails.</param>
+        /// <param name="timeout">Request timeout in seconds.</param>
+        /// <param name="retries">Number of retry attempts.</param>
+        /// <returns>Coroutine that requests organizations.</returns>
+        public IEnumerator GetOrganizations(uint pageSize, string cursor, bool includeMemberCount, Action<CursorPaginatedResult<OrganizationResult[]>> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
+        {
+            yield return RpcRequest("getOrganizations", callback, errorHandlingCallback, timeout, retries, pageSize, cursor, includeMemberCount);
+        }
+
+        /// <summary>
+        /// Gets organization members by registered name.
+        /// </summary>
+        /// <param name="name">Organization name.</param>
+        /// <param name="pageSize">Maximum number of members to return.</param>
+        /// <param name="cursor">Pagination cursor.</param>
+        /// <param name="includeMemberTime">True to include member timestamp.</param>
+        /// <param name="callback">Callback invoked with organization members.</param>
+        /// <param name="errorHandlingCallback">Callback invoked with SDK error type and message when the request fails.</param>
+        /// <param name="timeout">Request timeout in seconds.</param>
+        /// <param name="retries">Number of retry attempts.</param>
+        /// <returns>Coroutine that requests organization members.</returns>
+        public IEnumerator GetOrganizationMembers(string name, uint pageSize, string cursor, bool includeMemberTime, Action<CursorPaginatedResult<OrganizationMemberResult[]>> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
+        {
+            yield return RpcRequest("getOrganizationMembers", callback, errorHandlingCallback, timeout, retries, name, pageSize, cursor, includeMemberTime);
+        }
+
+        /// <summary>
+        /// Gets one organization membership by registered name.
+        /// </summary>
+        /// <param name="name">Organization name.</param>
+        /// <param name="address">Member address.</param>
+        /// <param name="checkAddressReservedByte">True to enforce reserved-byte validation.</param>
+        /// <param name="addressType">Member address type.</param>
+        /// <param name="callback">Callback invoked with organization member data.</param>
+        /// <param name="errorHandlingCallback">Callback invoked with SDK error type and message when the request fails.</param>
+        /// <param name="timeout">Request timeout in seconds.</param>
+        /// <param name="retries">Number of retry attempts.</param>
+        /// <returns>Coroutine that requests organization member data.</returns>
+        public IEnumerator GetOrganizationMember(string name, string address, bool checkAddressReservedByte, RpcAddressType addressType, Action<OrganizationMemberResult> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
+        {
+            yield return RpcRequest("getOrganizationMember", callback, errorHandlingCallback, timeout, retries, name, address, checkAddressReservedByte, addressType);
         }
         #endregion
         

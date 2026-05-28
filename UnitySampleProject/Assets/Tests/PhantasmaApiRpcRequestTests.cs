@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using NUnit.Framework;
 using PhantasmaPhoenix.Cryptography;
 using PhantasmaPhoenix.RPC.Models;
@@ -15,6 +16,8 @@ public class PhantasmaApiRpcRequestTests
         public int LastTimeout { get; private set; }
         public int LastRetries { get; private set; }
         public object NextResult { get; set; }
+        public List<string> Methods { get; } = new List<string>();
+        public List<object[]> Parameters { get; } = new List<object[]>();
 
         public CapturingPhantasmaApi() : base("http://127.0.0.1:1/rpc")
         {
@@ -26,6 +29,8 @@ public class PhantasmaApiRpcRequestTests
             LastParameters = parameters ?? Array.Empty<object>();
             LastTimeout = timeout;
             LastRetries = retries;
+            Methods.Add(LastMethod);
+            Parameters.Add(LastParameters);
 
             if (callback != null)
             {
@@ -286,6 +291,24 @@ public class PhantasmaApiRpcRequestTests
 
         Assert.That(callbackInvoked, Is.True);
         AssertCall(api, "getContractByAddress", "main", "P2KcontractAddress");
+    }
+
+    [Test]
+    public void OrganizationMethods_UseFinalNameFirstPayloads()
+    {
+        var api = new CapturingPhantasmaApi();
+
+        RunCoroutine(api.GetOrganization("masters", true, _ => { }));
+        AssertCall(api, "getOrganization", "masters", true);
+
+        RunCoroutine(api.GetOrganizations(2, "cursor", true, _ => { }));
+        AssertCall(api, "getOrganizations", 2U, "cursor", true);
+
+        RunCoroutine(api.GetOrganizationMembers("masters", 2, "", false, _ => { }));
+        AssertCall(api, "getOrganizationMembers", "masters", 2U, "", false);
+
+        RunCoroutine(api.GetOrganizationMember("masters", "Pmember", true, RpcAddressType.Phantasma, _ => { }));
+        AssertCall(api, "getOrganizationMember", "masters", "Pmember", true, RpcAddressType.Phantasma);
     }
 
     [Test]

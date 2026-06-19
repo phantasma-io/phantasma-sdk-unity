@@ -177,7 +177,7 @@ namespace PhantasmaPhoenix.Unity.Core
             }
         }
 
-        public static IEnumerator RPCRequest<T>(string url, string method, int timeout, int retriesOnNetworkError, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback,
+        public static IEnumerator RPCRequest<T>(string url, string apiKey, string method, int timeout, int retriesOnNetworkError, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback,
                                             Action<T> callback, params object[] parameters)
         {
             var requestNumber = GetNextRequestNumber().ToString();
@@ -202,6 +202,8 @@ namespace PhantasmaPhoenix.Unity.Core
                 request.uploadHandler = new UploadHandlerRaw(bodyRaw);
                 request.downloadHandler = new DownloadHandlerBuffer();
                 request.SetRequestHeader("Content-Type", "application/json");
+                if (!string.IsNullOrEmpty(apiKey))
+                    request.SetRequestHeader("X-Api-Key", apiKey);
                 if (timeout > 0)
                     request.timeout = timeout;
 

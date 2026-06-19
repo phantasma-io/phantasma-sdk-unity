@@ -23,12 +23,19 @@ namespace PhantasmaPhoenix.Unity.Core
         public readonly string Host;
 
         /// <summary>
+        /// Optional API key sent in the X-Api-Key header on every RPC request.
+        /// </summary>
+        public readonly string ApiKey;
+
+        /// <summary>
         /// Creates a Unity RPC API wrapper for a JSON-RPC endpoint.
         /// </summary>
         /// <param name="host">JSON-RPC endpoint URL, for example http://localhost:5172/rpc.</param>
-        public PhantasmaAPI(string host)
+        /// <param name="apiKey">Optional API key sent in the X-Api-Key header on every RPC request.</param>
+        public PhantasmaAPI(string host, string apiKey = null)
         {
             this.Host = host;
+            this.ApiKey = apiKey;
         }
 
         /// <summary>
@@ -44,7 +51,7 @@ namespace PhantasmaPhoenix.Unity.Core
         /// <returns>Coroutine that sends the JSON-RPC request.</returns>
         protected virtual IEnumerator RpcRequest<T>(string method, Action<T> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries, params object[] parameters)
         {
-            yield return WebClient.RPCRequest<T>(Host, method, timeout, retries, errorHandlingCallback, callback, parameters);
+            yield return WebClient.RPCRequest<T>(Host, ApiKey, method, timeout, retries, errorHandlingCallback, callback, parameters);
         }
 
         #region Account
@@ -133,7 +140,7 @@ namespace PhantasmaPhoenix.Unity.Core
         /// <returns>Coroutine that resolves an account name.</returns>
         public IEnumerator LookUpName(string name, Action<string> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
         {
-            yield return WebClient.RPCRequest<string>(Host, "lookUpName", timeout, retries, errorHandlingCallback, (result) => {
+            yield return WebClient.RPCRequest<string>(Host, ApiKey, "lookUpName", timeout, retries, errorHandlingCallback, (result) => {
                 callback(result);
             }, name);
         }
@@ -369,7 +376,7 @@ namespace PhantasmaPhoenix.Unity.Core
         /// <returns>Coroutine that requests the auction count.</returns>
         public IEnumerator GetAuctionsCount(string chainAddressOrName, string symbol, Action<int> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
         {
-            yield return WebClient.RPCRequest<string>(Host, "getAuctionsCount", timeout, retries, errorHandlingCallback, (result) => {
+            yield return WebClient.RPCRequest<string>(Host, ApiKey, "getAuctionsCount", timeout, retries, errorHandlingCallback, (result) => {
                 callback(int.Parse(result));
             }, chainAddressOrName, symbol);
         }
@@ -389,7 +396,7 @@ namespace PhantasmaPhoenix.Unity.Core
         /// <returns>Coroutine that requests paginated auctions.</returns>
         public IEnumerator GetAuctions(string chainAddressOrName, string symbol, uint page, uint pageSize, Action<AuctionResult[], uint, uint, uint> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
         {
-            yield return WebClient.RPCRequest<PaginatedResult<AuctionResult[]>>(Host, "getAuctions", timeout, retries, errorHandlingCallback, (result) => {
+            yield return WebClient.RPCRequest<PaginatedResult<AuctionResult[]>>(Host, ApiKey, "getAuctions", timeout, retries, errorHandlingCallback, (result) => {
                 callback(result.Result, result.Page, result.Total, result.TotalPages);
             }, chainAddressOrName, symbol, page, pageSize);
         }
@@ -409,7 +416,7 @@ namespace PhantasmaPhoenix.Unity.Core
         /// <returns>Coroutine that requests one auction.</returns>
         public IEnumerator GetAuction(string chainAddressOrName, string symbol, string IDtext, Action<AuctionResult> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
         {
-            yield return WebClient.RPCRequest<AuctionResult>(Host, "getAuction", timeout, retries, errorHandlingCallback, (result) => {
+            yield return WebClient.RPCRequest<AuctionResult>(Host, ApiKey, "getAuction", timeout, retries, errorHandlingCallback, (result) => {
                 callback(result);
             }, chainAddressOrName, symbol, IDtext);
         }
@@ -427,7 +434,7 @@ namespace PhantasmaPhoenix.Unity.Core
         /// <returns>Coroutine that requests the latest block height.</returns>
         public IEnumerator GetBlockHeight(string chainInput, Action<long> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
         {
-            yield return WebClient.RPCRequest<string>(Host, "getBlockHeight", timeout, retries, errorHandlingCallback, (result) => {
+            yield return WebClient.RPCRequest<string>(Host, ApiKey, "getBlockHeight", timeout, retries, errorHandlingCallback, (result) => {
                 callback(long.Parse(result));
             }, chainInput);
         }
@@ -475,7 +482,7 @@ namespace PhantasmaPhoenix.Unity.Core
         /// <returns>Coroutine that requests a block by hash.</returns>
         public IEnumerator GetBlockByHash(string blockHash, Action<BlockResult> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
         {
-            yield return WebClient.RPCRequest<BlockResult>(Host, "getBlockByHash", timeout, retries, errorHandlingCallback, (result) =>
+            yield return WebClient.RPCRequest<BlockResult>(Host, ApiKey, "getBlockByHash", timeout, retries, errorHandlingCallback, (result) =>
             {
                 callback(result);
             }, blockHash);
@@ -493,7 +500,7 @@ namespace PhantasmaPhoenix.Unity.Core
         /// <returns>Coroutine that requests a block by height.</returns>
         public IEnumerator GetBlockByHeight(string chainInput, long height, Action<BlockResult> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
         {
-            yield return WebClient.RPCRequest<BlockResult>(Host, "getBlockByHeight", timeout, retries, errorHandlingCallback, (result) => {
+            yield return WebClient.RPCRequest<BlockResult>(Host, ApiKey, "getBlockByHeight", timeout, retries, errorHandlingCallback, (result) => {
                 callback(result);
             }, chainInput, height.ToString());
         }
@@ -509,7 +516,7 @@ namespace PhantasmaPhoenix.Unity.Core
         /// <returns>Coroutine that requests the latest block.</returns>
         public IEnumerator GetLatestBlock(string chainInput, Action<BlockResult> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
         {
-            yield return WebClient.RPCRequest<BlockResult>(Host, "getLatestBlock", timeout, retries, errorHandlingCallback, (result) =>
+            yield return WebClient.RPCRequest<BlockResult>(Host, ApiKey, "getLatestBlock", timeout, retries, errorHandlingCallback, (result) =>
             {
                 callback(result);
             }, chainInput);
@@ -589,7 +596,7 @@ namespace PhantasmaPhoenix.Unity.Core
         /// <returns>Coroutine that requests all chains.</returns>
         public IEnumerator GetChains(Action<ChainResult[]> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
         {
-            yield return WebClient.RPCRequest<ChainResult[]>(Host, "getChains", timeout, retries, errorHandlingCallback, (result) => {
+            yield return WebClient.RPCRequest<ChainResult[]>(Host, ApiKey, "getChains", timeout, retries, errorHandlingCallback, (result) => {
                 callback(result);
             });
         }
@@ -608,7 +615,7 @@ namespace PhantasmaPhoenix.Unity.Core
         /// <returns>Coroutine that requests contract metadata by name.</returns>
         public IEnumerator GetContract(string contractName, Action<ContractResult> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
         {
-            yield return WebClient.RPCRequest<ContractResult>(Host, "getContract", timeout, retries, errorHandlingCallback, (result) => {
+            yield return WebClient.RPCRequest<ContractResult>(Host, ApiKey, "getContract", timeout, retries, errorHandlingCallback, (result) => {
                 callback(result);
             }, PhantasmaPhoenix.Protocol.DomainSettings.RootChainName, contractName);
         }
@@ -639,7 +646,7 @@ namespace PhantasmaPhoenix.Unity.Core
         /// <returns>Coroutine that requests all root-chain contracts.</returns>
         public IEnumerator GetContracts(Action<ContractResult[]> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
         {
-            yield return WebClient.RPCRequest<ContractResult[]>(Host, "getContracts", timeout, retries, errorHandlingCallback, (result) => {
+            yield return WebClient.RPCRequest<ContractResult[]>(Host, ApiKey, "getContracts", timeout, retries, errorHandlingCallback, (result) => {
                 callback(result);
             }, PhantasmaPhoenix.Protocol.DomainSettings.RootChainName);
         }
@@ -658,7 +665,7 @@ namespace PhantasmaPhoenix.Unity.Core
         /// <returns>Coroutine that requests leaderboard data.</returns>
         public IEnumerator GetLeaderboard(string name, Action<LeaderboardResult> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
         {
-            yield return WebClient.RPCRequest<LeaderboardResult>(Host, "getLeaderboard", timeout, retries, errorHandlingCallback, (result) => {
+            yield return WebClient.RPCRequest<LeaderboardResult>(Host, ApiKey, "getLeaderboard", timeout, retries, errorHandlingCallback, (result) => {
                 callback(result);
             }, name);
         }
@@ -676,7 +683,7 @@ namespace PhantasmaPhoenix.Unity.Core
         /// <returns>Coroutine that requests nexus metadata.</returns>
         public IEnumerator GetNexus(Action<NexusResult> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
         {
-            yield return WebClient.RPCRequest<NexusResult>(Host, "getNexus", timeout, retries, errorHandlingCallback, (result) => {
+            yield return WebClient.RPCRequest<NexusResult>(Host, ApiKey, "getNexus", timeout, retries, errorHandlingCallback, (result) => {
                 callback(result);
             });
         }
@@ -966,7 +973,7 @@ namespace PhantasmaPhoenix.Unity.Core
             }
             tokensLoadedSimultaneously++;
 
-            yield return WebClient.RPCRequest<TokenDataResult>(Host, "getTokenData", timeout, retries, errorHandlingCallback, (result) => {
+            yield return WebClient.RPCRequest<TokenDataResult>(Host, ApiKey, "getTokenData", timeout, retries, errorHandlingCallback, (result) => {
                 callback(result);
             }, symbol, IDtext);
 
@@ -993,7 +1000,7 @@ namespace PhantasmaPhoenix.Unity.Core
             }
             tokensLoadedSimultaneously++;
 
-            yield return WebClient.RPCRequest<TokenDataResult>(Host, "getNFT", timeout, retries, errorHandlingCallback, (result) => {
+            yield return WebClient.RPCRequest<TokenDataResult>(Host, ApiKey, "getNFT", timeout, retries, errorHandlingCallback, (result) => {
                 // TODO remove later, check if still required
                 if (string.IsNullOrEmpty(result.Id))
                 {
@@ -1065,7 +1072,7 @@ namespace PhantasmaPhoenix.Unity.Core
         /// <returns>Coroutine that requests an account token balance.</returns>
         public IEnumerator GetTokenBalance(string account, string tokenSymbol, string chainInput = "main", Action<BalanceResult> callback = null, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
         {
-            yield return WebClient.RPCRequest<BalanceResult>(Host, "getTokenBalance", timeout, retries, errorHandlingCallback, (result) => {
+            yield return WebClient.RPCRequest<BalanceResult>(Host, ApiKey, "getTokenBalance", timeout, retries, errorHandlingCallback, (result) => {
                 callback(result);
             }, account, tokenSymbol, chainInput);
         }
@@ -1104,7 +1111,7 @@ namespace PhantasmaPhoenix.Unity.Core
         /// <returns>Coroutine that requests paginated address transactions.</returns>
         public IEnumerator GetAddressTransactions(string addressText, uint page, uint pageSize, Action<AccountTransactionsResult, uint, uint> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
         {
-            yield return WebClient.RPCRequest<PaginatedResult<AccountTransactionsResult>>(Host, "getAddressTransactions", timeout, retries, errorHandlingCallback, (result) => {
+            yield return WebClient.RPCRequest<PaginatedResult<AccountTransactionsResult>>(Host, ApiKey, "getAddressTransactions", timeout, retries, errorHandlingCallback, (result) => {
                 callback(result.Result, result.Page, result.TotalPages);
             }, addressText, page, pageSize);
         }
@@ -1121,7 +1128,7 @@ namespace PhantasmaPhoenix.Unity.Core
         /// <returns>Coroutine that requests the number of address transactions on a chain.</returns>
         public IEnumerator GetAddressTransactionCount(string addressText, string chainInput, Action<int> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
         {
-            yield return WebClient.RPCRequest<string>(Host, "getAddressTransactionCount", timeout, retries, errorHandlingCallback, (result) => {
+            yield return WebClient.RPCRequest<string>(Host, ApiKey, "getAddressTransactionCount", timeout, retries, errorHandlingCallback, (result) => {
                 callback(int.Parse(result));
             }, addressText, chainInput);
         }
@@ -1174,7 +1181,7 @@ namespace PhantasmaPhoenix.Unity.Core
         /// <returns>Coroutine that invokes a VM script without committing state.</returns>
         public IEnumerator InvokeRawScript(string chainInput, string scriptData, Action<ScriptResult> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
         {
-            yield return WebClient.RPCRequest<ScriptResult>(Host, "invokeRawScript", timeout, retries, errorHandlingCallback, (result) => {
+            yield return WebClient.RPCRequest<ScriptResult>(Host, ApiKey, "invokeRawScript", timeout, retries, errorHandlingCallback, (result) => {
                 callback(result);
             }, chainInput, scriptData);
         }
@@ -1190,7 +1197,7 @@ namespace PhantasmaPhoenix.Unity.Core
         /// <returns>Coroutine that requests a transaction by hash.</returns>
         public IEnumerator GetTransaction(string hashText, Action<TransactionResult> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
         {
-            yield return WebClient.RPCRequest<TransactionResult>(Host, "getTransaction", timeout, retries, errorHandlingCallback, (result) => {
+            yield return WebClient.RPCRequest<TransactionResult>(Host, ApiKey, "getTransaction", timeout, retries, errorHandlingCallback, (result) => {
                 callback(result);
             }, hashText);
         }
@@ -1209,7 +1216,7 @@ namespace PhantasmaPhoenix.Unity.Core
         /// <returns>Coroutine that requests archive metadata.</returns>
         public IEnumerator GetArchive(string hashText, Action<ArchiveResult> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
         {
-            yield return WebClient.RPCRequest<ArchiveResult>(Host, "getArchive", timeout, retries, errorHandlingCallback, (result) => {
+            yield return WebClient.RPCRequest<ArchiveResult>(Host, ApiKey, "getArchive", timeout, retries, errorHandlingCallback, (result) => {
                 callback(result);
             }, hashText);
         }
@@ -1228,7 +1235,7 @@ namespace PhantasmaPhoenix.Unity.Core
         /// <returns>Coroutine that writes one archive block.</returns>
         public IEnumerator WriteArchive(string hashText, int blockIndex, byte[] blockContent, Action<Boolean> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
         {
-            yield return WebClient.RPCRequest<string>(Host, "writeArchive", timeout, retries, errorHandlingCallback, (result) =>
+            yield return WebClient.RPCRequest<string>(Host, ApiKey, "writeArchive", timeout, retries, errorHandlingCallback, (result) =>
             {
                 callback(Boolean.Parse(result));
             }, hashText, blockIndex, Convert.ToBase64String(blockContent));
@@ -1247,7 +1254,7 @@ namespace PhantasmaPhoenix.Unity.Core
         /// <returns>Coroutine that reads one archive block.</returns>
         public IEnumerator ReadArchive(string hashText, int blockIndex, Action<string> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
         {
-            yield return WebClient.RPCRequest<string>(Host, "readArchive", timeout, retries, errorHandlingCallback, (result) => {
+            yield return WebClient.RPCRequest<string>(Host, ApiKey, "readArchive", timeout, retries, errorHandlingCallback, (result) => {
                 callback(result);
             }, hashText, blockIndex);
         }

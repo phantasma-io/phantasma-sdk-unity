@@ -8,82 +8,82 @@ using PhantasmaPhoenix.Protocol;
 // Unity MonoBehaviour used to demonstrate how to unstake SOUL tokens
 public class Example08_UnstakeSoul : MonoBehaviour
 {
-    // Entry point of example
-    public void Run()
-    {
-        // Get reference to the scene-wide manager that stores API config and global variables
-        var manager = FindObjectOfType<CoreExampleManager>();
+	// Entry point of example
+	public void Run()
+	{
+		// Get reference to the scene-wide manager that stores API config and global variables
+		var manager = FindObjectOfType<CoreExampleManager>();
 
-        var keys = manager.keys;
+		var keys = manager.keys;
 
-        // Abort if keys are not initialized - transaction cannot be signed
-        if (keys == null)
-        {
-            throw new Exception("Private key is not set");
-        }
+		// Abort if keys are not initialized - transaction cannot be signed
+		if (keys == null)
+		{
+			throw new Exception("Private key is not set");
+		}
 
-        // Address derived from the loaded private key - used as transaction sender
-        var senderAddress = keys.Address;
+		// Address derived from the loaded private key - used as transaction sender
+		var senderAddress = keys.Address;
 
-        // Access the initialized Phantasma API instance
-        var api = manager.phantasmaAPI;
+		// Access the initialized Phantasma API instance
+		var api = manager.phantasmaAPI;
 
-        // Target chain Nexus name (e.g. "testnet" or "mainnet") - configured in the Unity inspector
-        var nexus = manager.Nexus;
-        
-        // Amount to unstake - configured in the Unity inspector
-        var amount = manager.TokenAmount;
+		// Target chain Nexus name (e.g. "testnet" or "mainnet") - configured in the Unity inspector
+		var nexus = manager.Nexus;
 
-        // Not used right now, use as is
-        var feePrice = 100000; // TODO: Adapt to new fee model.
-        var feeLimit = 21000; // TODO: Adapt to new fee model.
+		// Amount to unstake - configured in the Unity inspector
+		var amount = manager.TokenAmount;
 
-        byte[] script;
+		// Not used right now, use as is
+		var feePrice = 100000; // TODO: Adapt to new fee model.
+		var feeLimit = 21000; // TODO: Adapt to new fee model.
 
-        try
-        {
-            // ScriptBuilder is used to create a serialized transaction script
-            var sb = new ScriptBuilder();
-            // Instruction to allow gas fees for the transaction - required by all transaction scripts
-            sb.AllowGas(senderAddress, Address.Null, feePrice, feeLimit);
+		byte[] script;
 
-            // Call the 'Unstake' method in the 'stake' contract with sender address and converted to big integer token amount
-            sb.CallContract("stake", "Unstake", senderAddress, UnitConversion.ToBigInteger((decimal)amount, DomainSettings.StakingTokenDecimals));
+		try
+		{
+			// ScriptBuilder is used to create a serialized transaction script
+			var sb = new ScriptBuilder();
+			// Instruction to allow gas fees for the transaction - required by all transaction scripts
+			sb.AllowGas(senderAddress, Address.Null, feePrice, feeLimit);
 
-            // Spend gas necessary for transaction execution
-            sb.SpendGas(senderAddress);
+			// Call the 'Unstake' method in the 'stake' contract with sender address and converted to big integer token amount
+			sb.CallContract("stake", "Unstake", senderAddress, UnitConversion.ToBigInteger((decimal)amount, DomainSettings.StakingTokenDecimals));
 
-            // Finalize and get raw bytecode for the transaction script
-            script = sb.EndScript();
-        }
-        catch (Exception e)
-        {
-            Debug.LogError($"[Error] Could not built transaction script {e}");
-            return;
-        }
+			// Spend gas necessary for transaction execution
+			sb.SpendGas(senderAddress);
 
-        // Sign and send the transaction using the generated script and optional payload comment
-        StartCoroutine(api.SignAndSendTransaction(keys, nexus, script, "main", "example8-tx-payload",
-            // Callback on success
-            (txHash, encodedTx) =>
-            {
-                if (!string.IsNullOrEmpty(txHash))
-                {
-                    Debug.Log($"Transaction was sent, hash: {txHash}. Check transaction status using GetTransaction() call");
+			// Finalize and get raw bytecode for the transaction script
+			script = sb.EndScript();
+		}
+		catch (Exception e)
+		{
+			Debug.LogError($"[Error] Could not built transaction script {e}");
+			return;
+		}
 
-                    // Start polling to track transaction execution status on-chain
-                    StartCoroutine(Example06_CheckTransactionState.CheckTxStateLoop(txHash, null));
-                    return;
-                }
-                else
-                {
-                    Debug.LogError("[Error] Empty transaction hash returned, but no explicit error");
-                }
-            },
-            // Callback for RPC errors (invalid token, network error, etc.)
-            (errorCode, errorMessage) =>
-            {
-                Debug.LogError($"[Error][{errorCode}] Failed to send transaction: {errorMessage}");
-            }));
-    }
+		// Sign and send the transaction using the generated script and optional payload comment
+		StartCoroutine(api.SignAndSendTransaction(keys, nexus, script, "main", "example8-tx-payload",
+			// Callback on success
+			(txHash, encodedTx) =>
+			{
+				if (!string.IsNullOrEmpty(txHash))
+				{
+					Debug.Log($"Transaction was sent, hash: {txHash}. Check transaction status using GetTransaction() call");
+
+					// Start polling to track transaction execution status on-chain
+					StartCoroutine(Example06_CheckTransactionState.CheckTxStateLoop(txHash, null));
+					return;
+				}
+				else
+				{
+					Debug.LogError("[Error] Empty transaction hash returned, but no explicit error");
+				}
+			},
+			// Callback for RPC errors (invalid token, network error, etc.)
+			(errorCode, errorMessage) =>
+			{
+				Debug.LogError($"[Error][{errorCode}] Failed to send transaction: {errorMessage}");
+			}));
+	}
 }

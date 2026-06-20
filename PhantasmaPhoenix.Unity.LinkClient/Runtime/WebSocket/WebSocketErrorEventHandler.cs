@@ -1,4 +1,4 @@
 namespace NativeWebSocket
 {
-    public delegate void WebSocketErrorEventHandler(string errorMsg);
+	public delegate void WebSocketErrorEventHandler(string errorMsg);
 }

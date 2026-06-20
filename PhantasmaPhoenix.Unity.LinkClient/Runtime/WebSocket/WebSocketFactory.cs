@@ -1,14 +1,14 @@
 namespace NativeWebSocket
 {
-    ///
-    /// Factory
-    ///
+	///
+	/// Factory
+	///
 
-    /// <summary>
-    /// Class providing static access methods to work with JSLIB WebSocket or WebSocketSharp interface
-    /// </summary>
-    public static class WebSocketFactory
-    {
+	/// <summary>
+	/// Class providing static access methods to work with JSLIB WebSocket or WebSocketSharp interface
+	/// </summary>
+	public static class WebSocketFactory
+	{
 
 #if UNITY_WEBGL && !UNITY_EDITOR
     /* Map of websocket instances */
@@ -119,15 +119,15 @@ namespace NativeWebSocket
     }
 #endif
 
-        /// <summary>
-        /// Create WebSocket client instance
-        /// </summary>
-        /// <returns>The WebSocket instance.</returns>
-        /// <param name="url">WebSocket valid URL.</param>
-        public static WebSocket CreateInstance(string url)
-        {
-            return new WebSocket(url);
-        }
+		/// <summary>
+		/// Create WebSocket client instance
+		/// </summary>
+		/// <returns>The WebSocket instance.</returns>
+		/// <param name="url">WebSocket valid URL.</param>
+		public static WebSocket CreateInstance(string url)
+		{
+			return new WebSocket(url);
+		}
 
-    }
+	}
 }

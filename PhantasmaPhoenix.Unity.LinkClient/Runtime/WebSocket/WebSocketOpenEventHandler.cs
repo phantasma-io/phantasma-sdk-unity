@@ -1,4 +1,4 @@
 namespace NativeWebSocket
 {
-    public delegate void WebSocketOpenEventHandler();
+	public delegate void WebSocketOpenEventHandler();
 }

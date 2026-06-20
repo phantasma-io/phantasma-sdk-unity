@@ -6,27 +6,27 @@ using UnityEngine;
 
 public class PhantasmaLinkClientPluginManager : MonoBehaviour
 {
-    public static PhantasmaLinkClientPluginManager Instance { get; private set; }
-    [SerializeField] private const string PluginName = "com.phantasma.phantasmalinkclient.PhantasmaLinkClientClass";
-    
-    private AndroidJavaClass UnityClass;
-    private AndroidJavaObject UnityActivity;
-    private AndroidJavaObject _PluginInstance;
+	public static PhantasmaLinkClientPluginManager Instance { get; private set; }
+	[SerializeField] private const string PluginName = "com.phantasma.phantasmalinkclient.PhantasmaLinkClientClass";
 
-    private void Awake()
-    {
-        Instance = this;
-    }
+	private AndroidJavaClass UnityClass;
+	private AndroidJavaObject UnityActivity;
+	private AndroidJavaObject _PluginInstance;
 
-    void Start()
-    {
+	private void Awake()
+	{
+		Instance = this;
+	}
+
+	void Start()
+	{
 #if UNITY_ANDROID || UNITY_EDITOR
         InitializePlugin(PluginName);
 #endif
-    }
+	}
 
-    private void InitializePlugin(string pluginName)
-    {
+	private void InitializePlugin(string pluginName)
+	{
 #if UNITY_ANDROID
         UnityClass = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
         UnityActivity = UnityClass.GetStatic<AndroidJavaObject>("currentActivity");
@@ -39,44 +39,44 @@ public class PhantasmaLinkClientPluginManager : MonoBehaviour
         _PluginInstance.CallStatic("ReceiveActivity", UnityActivity);
         PhantasmaLinkClient.Instance.Enable();
 #endif
-    }
+	}
 
-    public void OnDoSomething()
-    {
+	public void OnDoSomething()
+	{
 #if UNITY_ANDROID
         var result = _PluginInstance.Call<string>("DoSomething");
         if (DebugOutput != null )
             DebugOutput.text = $"Something: {result}";
 #endif
-    }
+	}
 
-    public void OpenWallet()
-    {
-        #if UNITY_ANDROID
+	public void OpenWallet()
+	{
+#if UNITY_ANDROID
         _PluginInstance.Call("OpenWallet");
-        #endif
-    }
+#endif
+	}
 
 
-    public async Task SendTransaction(string tx)
-    {
+	public async Task SendTransaction(string tx)
+	{
 #if UNITY_ANDROID
         var result = _PluginInstance.Call<string>("SendMyCommand", tx);
         await Task.Delay(0);
 #else
-        await Task.Delay(0);
+		await Task.Delay(0);
 #endif
-    }
+	}
 
-    public void Example()
-    {
-        #if UNITY_ANDROID
+	public void Example()
+	{
+#if UNITY_ANDROID
         PhantasmaLinkClient.Instance.Login();
-        #endif
-    }
+#endif
+	}
 
-    public void HandleResult()
-    {
-        
-    }
+	public void HandleResult()
+	{
+
+	}
 }

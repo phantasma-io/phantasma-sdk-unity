@@ -1,4 +1,4 @@
 namespace NativeWebSocket
 {
-    public delegate void WebSocketCloseEventHandler(WebSocketCloseCode closeCode);
+	public delegate void WebSocketCloseEventHandler(WebSocketCloseCode closeCode);
 }

@@ -30,9 +30,11 @@ public class WalletInteractions : MonoBehaviour
 		if (!PhantasmaLinkClient.Instance.IsLogged) return;
 
 		PhantasmaAPI api = new PhantasmaAPI(PhantasmaRpc);
-		StartCoroutine(api.GetAccount(PhantasmaLinkClient.Instance.Address, account =>
+		// Balances come from the cursor-paginated endpoint (the node accepts pageSize 1..100) instead
+		// of the legacy account blob, whose embedded NFT id lists grow with the size of the account.
+		StartCoroutine(api.GetAccountFungibleTokens(PhantasmaLinkClient.Instance.Address, "", 0, 100, "", true, page =>
 		{
-			Debug.Log(account.Balances.Length);
+			Debug.Log(page.Result.Length);
 		}));
 	}
 

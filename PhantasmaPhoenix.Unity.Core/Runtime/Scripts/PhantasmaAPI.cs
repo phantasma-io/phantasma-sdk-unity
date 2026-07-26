@@ -93,12 +93,19 @@ namespace PhantasmaPhoenix.Unity.Core
 		/// <summary>
 		/// Gets account information, including balances, for the specified address
 		/// </summary>
+		/// <remarks>
+		/// Deprecated. The response embeds every NFT id the address owns, so it grows without bound
+		/// with the size of the account; the node caps each Balances[].Ids list at 10000 entries while
+		/// Balances[].Amount keeps the true count. Use GetAccountInfo together with
+		/// GetAccountFungibleTokens and GetAccountNFTs.
+		/// </remarks>
 		/// <param name="addressText">Account address text.</param>
 		/// <param name="callback">Callback invoked with account data.</param>
 		/// <param name="errorHandlingCallback">Callback invoked with SDK error type and message when the request fails.</param>
 		/// <param name="timeout">Request timeout in seconds.</param>
 		/// <param name="retries">Number of retry attempts.</param>
 		/// <returns>Coroutine that requests account data.</returns>
+		[Obsolete("Use GetAccountInfo with GetAccountFungibleTokens/GetAccountNFTs; getAccount caps Balances[].Ids at 10000.")]
 		public IEnumerator GetAccount(string addressText, Action<AccountResult> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
 		{
 			yield return RpcRequest("getAccount", callback, errorHandlingCallback, timeout, retries, addressText);
@@ -116,6 +123,7 @@ namespace PhantasmaPhoenix.Unity.Core
 		/// <param name="timeout">Request timeout in seconds.</param>
 		/// <param name="retries">Number of retry attempts.</param>
 		/// <returns>Coroutine that requests account data.</returns>
+		[Obsolete("Use GetAccountInfo with GetAccountFungibleTokens/GetAccountNFTs; getAccount caps Balances[].Ids at 10000.")]
 		public IEnumerator GetAccount(string addressText, bool extended, bool checkAddressReservedByte, RpcAddressType addressType, Action<AccountResult> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
 		{
 			yield return RpcRequest("getAccount", callback, errorHandlingCallback, timeout, retries, addressText, extended, checkAddressReservedByte, addressType);
@@ -130,6 +138,7 @@ namespace PhantasmaPhoenix.Unity.Core
 		/// <param name="timeout">Request timeout in seconds.</param>
 		/// <param name="retries">Number of retry attempts.</param>
 		/// <returns>Coroutine that requests account data, or completes immediately with an empty array when no addresses are provided.</returns>
+		[Obsolete("Use GetAccountInfo with GetAccountFungibleTokens/GetAccountNFTs; getAccounts caps Balances[].Ids at 10000.")]
 		public IEnumerator GetAccounts(string[] addresses, Action<AccountResult[]> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
 		{
 			if (addresses == null || addresses.Length == 0)
@@ -153,6 +162,7 @@ namespace PhantasmaPhoenix.Unity.Core
 		/// <param name="timeout">Request timeout in seconds.</param>
 		/// <param name="retries">Number of retry attempts.</param>
 		/// <returns>Coroutine that requests account data, or completes immediately with an empty array when no addresses are provided.</returns>
+		[Obsolete("Use GetAccountInfo with GetAccountFungibleTokens/GetAccountNFTs; getAccounts caps Balances[].Ids at 10000.")]
 		public IEnumerator GetAccounts(string[] addresses, bool extended, bool checkAddressReservedByte, RpcAddressType addressType, Action<AccountResult[]> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
 		{
 			if (addresses == null || addresses.Length == 0)

@@ -1,6 +1,6 @@
 {
   "name": "com.phantasmaphoenix.linkclient",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "displayName": "Phantasma Phoenix Link Client",
   "description": "Unity SDK package to connect Phantasma-enabled apps with Phantasma Link (Poltergeist or other wallet)",
   "unity": "2021.3",

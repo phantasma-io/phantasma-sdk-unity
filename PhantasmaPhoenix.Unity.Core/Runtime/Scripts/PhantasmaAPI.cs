@@ -889,7 +889,7 @@ namespace PhantasmaPhoenix.Unity.Core
 		/// <summary>
 		/// Gets an array of all tokens deployed on Phantasma with extended payload enabled
 		/// </summary>
-		/// <param name="extended">True to include extended token data.</param>
+		/// <param name="extended">True to include extended token data. Deprecated server-side and slated for removal.</param>
 		/// <param name="callback">Callback invoked with token metadata.</param>
 		/// <param name="errorHandlingCallback">Callback invoked with SDK error type and message when the request fails.</param>
 		/// <param name="timeout">Request timeout in seconds.</param>
@@ -903,7 +903,7 @@ namespace PhantasmaPhoenix.Unity.Core
 		/// <summary>
 		/// Gets an array of all tokens deployed on Phantasma with optional owner filtering
 		/// </summary>
-		/// <param name="extended">True to include extended token data.</param>
+		/// <param name="extended">True to include extended token data. Deprecated server-side and slated for removal.</param>
 		/// <param name="ownerAddress">Optional owner address filter.</param>
 		/// <param name="callback">Callback invoked with token metadata.</param>
 		/// <param name="errorHandlingCallback">Callback invoked with SDK error type and message when the request fails.</param>
@@ -918,7 +918,7 @@ namespace PhantasmaPhoenix.Unity.Core
 		/// <summary>
 		/// Gets an array of all tokens deployed on Phantasma with optional owner filtering and explicit owner address type
 		/// </summary>
-		/// <param name="extended">True to include extended token data.</param>
+		/// <param name="extended">True to include extended token data. Deprecated server-side and slated for removal.</param>
 		/// <param name="ownerAddress">Optional owner address filter.</param>
 		/// <param name="addressType">Owner address type.</param>
 		/// <param name="callback">Callback invoked with token metadata.</param>
@@ -1022,6 +1022,11 @@ namespace PhantasmaPhoenix.Unity.Core
 		/// <param name="timeout">Request timeout in seconds.</param>
 		/// <param name="retries">Number of retry attempts.</param>
 		/// <returns>Coroutine that requests token data.</returns>
+		/// <remarks>
+		/// Deprecated. The node serves this as a strict subset of getNFT - same response, with
+		/// property loading forced off - so GetNFT covers it entirely.
+		/// </remarks>
+		[Obsolete("Use GetNFT; getTokenData is a strict subset of getNFT.")]
 		public IEnumerator GetTokenData(string symbol, string IDtext, Action<TokenDataResult> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
 		{
 			while (tokensLoadedSimultaneously > 5)

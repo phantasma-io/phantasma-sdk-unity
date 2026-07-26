@@ -56,6 +56,41 @@ namespace PhantasmaPhoenix.Unity.Core
 
 		#region Account
 		/// <summary>
+		/// Gets a lightweight account overview (name and staking) for the specified address
+		/// </summary>
+		/// <remarks>
+		/// Cost is independent of how much the address holds, which makes this the call to use in
+		/// wallet refresh loops; balances and NFTs are fetched separately through the cursor-paginated
+		/// account endpoints.
+		/// </remarks>
+		/// <param name="addressText">Account address text.</param>
+		/// <param name="callback">Callback invoked with the account overview.</param>
+		/// <param name="errorHandlingCallback">Callback invoked with SDK error type and message when the request fails.</param>
+		/// <param name="timeout">Request timeout in seconds.</param>
+		/// <param name="retries">Number of retry attempts.</param>
+		/// <returns>Coroutine that requests the account overview.</returns>
+		public IEnumerator GetAccountInfo(string addressText, Action<AccountInfoResult> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
+		{
+			yield return RpcRequest("getAccountInfo", callback, errorHandlingCallback, timeout, retries, addressText);
+		}
+
+		/// <summary>
+		/// Gets a lightweight account overview (name and staking) for the specified address and address type
+		/// </summary>
+		/// <param name="addressText">Account address text.</param>
+		/// <param name="checkAddressReservedByte">True to enforce reserved-byte validation.</param>
+		/// <param name="addressType">Account address type.</param>
+		/// <param name="callback">Callback invoked with the account overview.</param>
+		/// <param name="errorHandlingCallback">Callback invoked with SDK error type and message when the request fails.</param>
+		/// <param name="timeout">Request timeout in seconds.</param>
+		/// <param name="retries">Number of retry attempts.</param>
+		/// <returns>Coroutine that requests the account overview.</returns>
+		public IEnumerator GetAccountInfo(string addressText, bool checkAddressReservedByte, RpcAddressType addressType, Action<AccountInfoResult> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
+		{
+			yield return RpcRequest("getAccountInfo", callback, errorHandlingCallback, timeout, retries, addressText, checkAddressReservedByte, addressType);
+		}
+
+		/// <summary>
 		/// Gets account information, including balances, for the specified address
 		/// </summary>
 		/// <param name="addressText">Account address text.</param>

@@ -162,6 +162,39 @@ public class PhantasmaApiRpcRequestTests
 	}
 
 	[Test]
+	public void GetAccountInfo_SendsOnlyTheAccount()
+	{
+		var api = new CapturingPhantasmaApi();
+		var callbackInvoked = false;
+
+		// The endpoint exists so wallets can refresh at a cost independent of account size; sending an
+		// extra argument would change which node overload is dispatched.
+		RunCoroutine(api.GetAccountInfo("P2Kaccount", _ => callbackInvoked = true));
+
+		Assert.That(callbackInvoked, Is.True);
+		AssertCall(api, "getAccountInfo", "P2Kaccount");
+	}
+
+	[Test]
+	public void GetAccountInfo_WithAddressType_UsesExpandedSignature()
+	{
+		var api = new CapturingPhantasmaApi();
+		var callbackInvoked = false;
+
+		RunCoroutine(api.GetAccountInfo(
+			"00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
+			false,
+			RpcAddressType.Carbon,
+			_ => callbackInvoked = true));
+
+		Assert.That(callbackInvoked, Is.True);
+		AssertCall(api, "getAccountInfo", "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff", false, RpcAddressType.Carbon);
+	}
+
+	[Test]
+	// Covers the deprecated account surface on purpose: the expanded signature must keep working
+	// for existing integrations until they migrate to GetAccountInfo.
+#pragma warning disable CS0618
 	public void GetAccount_WithAddressTypeAndValidationFlags_UsesExpandedSignature()
 	{
 		var api = new CapturingPhantasmaApi();
@@ -177,8 +210,12 @@ public class PhantasmaApiRpcRequestTests
 		Assert.That(callbackInvoked, Is.True);
 		AssertCall(api, "getAccount", "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff", true, false, RpcAddressType.Carbon);
 	}
+#pragma warning restore CS0618
 
 	[Test]
+	// Covers the deprecated account surface on purpose: the expanded signature must keep working
+	// for existing integrations until they migrate to GetAccountInfo.
+#pragma warning disable CS0618
 	public void GetAccounts_WithAddressTypeAndValidationFlags_JoinsAddressesAndUsesExpandedSignature()
 	{
 		var api = new CapturingPhantasmaApi();
@@ -198,6 +235,7 @@ public class PhantasmaApiRpcRequestTests
 		Assert.That(callbackInvoked, Is.True);
 		AssertCall(api, "getAccounts", "addr-1,addr-2", true, false, RpcAddressType.Carbon);
 	}
+#pragma warning restore CS0618
 
 	[Test]
 	public void GetAccountFungibleTokens_WithAddressType_UsesCursorPayload()

@@ -653,6 +653,24 @@ namespace PhantasmaPhoenix.Unity.Core
 				callback(result);
 			});
 		}
+
+		/// <summary>
+		/// Gets the current on-chain gas configuration plus the chain parameters fee estimation needs
+		/// </summary>
+		/// <remarks>
+		/// Changes only via governance resolutions, so the result is safe to cache for the lifetime of
+		/// an endpoint. Feed <see cref="GasConfigResult.ToGasConfig"/> into NativeFeeEstimator to obtain
+		/// Tier-1 fee estimates without a round trip per transaction.
+		/// </remarks>
+		/// <param name="callback">Callback invoked with the gas configuration.</param>
+		/// <param name="errorHandlingCallback">Callback invoked with SDK error type and message when the request fails.</param>
+		/// <param name="timeout">Request timeout in seconds.</param>
+		/// <param name="retries">Number of retry attempts.</param>
+		/// <returns>Coroutine that requests the gas configuration.</returns>
+		public IEnumerator GetGasConfig(Action<GasConfigResult> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
+		{
+			yield return RpcRequest("getGasConfig", callback, errorHandlingCallback, timeout, retries);
+		}
 		#endregion
 
 		#region Contract
@@ -1252,6 +1270,28 @@ namespace PhantasmaPhoenix.Unity.Core
 			{
 				callback(result);
 			}, chainInput, scriptData);
+		}
+
+		/// <summary>
+		/// Dry-runs a serialized transaction envelope against current chain state and returns its exact
+		/// fee bill with recommended maxGas/maxData (gas-model-v2 Tier-2 estimate)
+		/// </summary>
+		/// <remarks>
+		/// Signatures inside the envelope may be zero-filled dummies of the correct length: the
+		/// simulation skips signature checks, and dummies preserve the exact envelope byte length the
+		/// bill depends on. The endpoint routes through the node's query plane and answers a standard
+		/// RPC error where that plane is not deployed; the Tier-1 NativeFeeEstimator fed by
+		/// <see cref="GetGasConfig"/> covers that case.
+		/// </remarks>
+		/// <param name="txData">Hex-encoded serialized transaction envelope (signed or dummy-signed).</param>
+		/// <param name="callback">Callback invoked with the fee estimate.</param>
+		/// <param name="errorHandlingCallback">Callback invoked with SDK error type and message when the request fails.</param>
+		/// <param name="timeout">Request timeout in seconds.</param>
+		/// <param name="retries">Number of retry attempts.</param>
+		/// <returns>Coroutine that estimates the fee of a transaction envelope.</returns>
+		public IEnumerator EstimateTransaction(string txData, Action<EstimateTransactionResult> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
+		{
+			yield return RpcRequest("estimateTransaction", callback, errorHandlingCallback, timeout, retries, txData);
 		}
 
 		/// <summary>

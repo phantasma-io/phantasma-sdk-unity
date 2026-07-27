@@ -602,4 +602,31 @@ public class PhantasmaApiRpcRequestTests
 		Assert.That(api.LastParameters, Has.Length.EqualTo(1));
 		Assert.That(api.LastParameters[0], Is.TypeOf<string>());
 	}
+
+	[Test]
+	public void GetGasConfig_SendsNoParameters()
+	{
+		var api = new CapturingPhantasmaApi();
+		var callbackInvoked = false;
+
+		// The node exposes no overload of getGasConfig; sending any argument would fail to dispatch.
+		RunCoroutine(api.GetGasConfig(_ => callbackInvoked = true));
+
+		Assert.That(callbackInvoked, Is.True);
+		AssertCall(api, "getGasConfig");
+	}
+
+	[Test]
+	public void EstimateTransaction_SendsOnlyTheEnvelope()
+	{
+		var api = new CapturingPhantasmaApi();
+		var callbackInvoked = false;
+
+		// The envelope is the single argument and must reach the node verbatim: the bill it returns
+		// is a function of the exact byte length, so any re-encoding here would change the estimate.
+		RunCoroutine(api.EstimateTransaction("0a0b0c", _ => callbackInvoked = true));
+
+		Assert.That(callbackInvoked, Is.True);
+		AssertCall(api, "estimateTransaction", "0a0b0c");
+	}
 }

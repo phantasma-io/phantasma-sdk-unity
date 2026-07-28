@@ -1,6 +1,6 @@
 {
   "name": "com.phantasmaphoenix.core",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "displayName": "Phantasma Phoenix Core",
   "description": "Core Unity SDK for Phantasma Phoenix. Includes signing, serialization, and transaction tools without any UI dependencies",
   "unity": "2021.3",

@@ -192,6 +192,37 @@ public class PhantasmaApiRpcRequestTests
 	}
 
 	[Test]
+	public void GetAccountInfos_SendsNativeAddressArray()
+	{
+		var api = new CapturingPhantasmaApi();
+		var callbackInvoked = false;
+
+		// The batch contract is a NATIVE JSON array parameter (one element), not the comma-joined
+		// string the deprecated getAccounts wire used; a params-array expansion bug would spread the
+		// addresses into separate positional parameters.
+		RunCoroutine(api.GetAccountInfos(new[] { "P2Kaccount1", "P2Kaccount2" }, _ => callbackInvoked = true));
+
+		Assert.That(callbackInvoked, Is.True);
+		AssertCall(api, "getAccountInfos", (object)new[] { "P2Kaccount1", "P2Kaccount2" });
+	}
+
+	[Test]
+	public void GetAccountInfos_WithAddressType_UsesExpandedSignature()
+	{
+		var api = new CapturingPhantasmaApi();
+		var callbackInvoked = false;
+
+		RunCoroutine(api.GetAccountInfos(
+			new[] { "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff" },
+			false,
+			RpcAddressType.Carbon,
+			_ => callbackInvoked = true));
+
+		Assert.That(callbackInvoked, Is.True);
+		AssertCall(api, "getAccountInfos", new[] { "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff" }, false, RpcAddressType.Carbon);
+	}
+
+	[Test]
 	// Covers the deprecated account surface on purpose: the expanded signature must keep working
 	// for existing integrations until they migrate to GetAccountInfo.
 #pragma warning disable CS0618

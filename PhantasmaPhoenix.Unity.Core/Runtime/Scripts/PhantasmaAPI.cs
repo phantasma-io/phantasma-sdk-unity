@@ -91,6 +91,54 @@ namespace PhantasmaPhoenix.Unity.Core
 		}
 
 		/// <summary>
+		/// Gets lightweight account overviews (name and staking) for a batch of addresses in one call
+		/// </summary>
+		/// <remarks>
+		/// Batch counterpart of GetAccountInfo with the same per-account record: the node answers
+		/// every address from a single state snapshot and returns results in request order, at most
+		/// 100 addresses per request. The addresses travel as a native JSON array parameter; a
+		/// malformed address rejects the whole batch.
+		/// </remarks>
+		/// <param name="addresses">Account addresses, at most 100 per request.</param>
+		/// <param name="callback">Callback invoked with the account overviews in request order.</param>
+		/// <param name="errorHandlingCallback">Callback invoked with SDK error type and message when the request fails.</param>
+		/// <param name="timeout">Request timeout in seconds.</param>
+		/// <param name="retries">Number of retry attempts.</param>
+		/// <returns>Coroutine that requests the account overviews, or completes immediately with an empty array when no addresses are provided.</returns>
+		public IEnumerator GetAccountInfos(string[] addresses, Action<AccountInfoResult[]> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
+		{
+			if (addresses == null || addresses.Length == 0)
+			{
+				callback(new AccountInfoResult[0]);
+				yield break;
+			}
+
+			yield return RpcRequest("getAccountInfos", callback, errorHandlingCallback, timeout, retries, new object[] { addresses });
+		}
+
+		/// <summary>
+		/// Gets lightweight account overviews (name and staking) for a batch of addresses of the same address type
+		/// </summary>
+		/// <param name="addresses">Account addresses of the same address type, at most 100 per request.</param>
+		/// <param name="checkAddressReservedByte">True to enforce reserved-byte validation.</param>
+		/// <param name="addressType">Account address type.</param>
+		/// <param name="callback">Callback invoked with the account overviews in request order.</param>
+		/// <param name="errorHandlingCallback">Callback invoked with SDK error type and message when the request fails.</param>
+		/// <param name="timeout">Request timeout in seconds.</param>
+		/// <param name="retries">Number of retry attempts.</param>
+		/// <returns>Coroutine that requests the account overviews, or completes immediately with an empty array when no addresses are provided.</returns>
+		public IEnumerator GetAccountInfos(string[] addresses, bool checkAddressReservedByte, RpcAddressType addressType, Action<AccountInfoResult[]> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
+		{
+			if (addresses == null || addresses.Length == 0)
+			{
+				callback(new AccountInfoResult[0]);
+				yield break;
+			}
+
+			yield return RpcRequest("getAccountInfos", callback, errorHandlingCallback, timeout, retries, addresses, checkAddressReservedByte, addressType);
+		}
+
+		/// <summary>
 		/// Gets account information, including balances, for the specified address
 		/// </summary>
 		/// <remarks>

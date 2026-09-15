@@ -8,7 +8,7 @@ public class Example01_GenerateKey : MonoBehaviour
 	public void Run()
 	{
 		// Get reference to the scene-wide manager that stores API config and global variables
-		var manager = FindObjectOfType<CoreExampleManager>();
+		var manager = FindFirstObjectByType<CoreExampleManager>();
 
 		// Generate a new random private key and derive corresponding address and public key
 		var key = PhantasmaKeys.Generate();

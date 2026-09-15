@@ -9,7 +9,7 @@ public class Example04_GetAddressTokenBalance : MonoBehaviour
 	public void Run()
 	{
 		// Get reference to the scene-wide manager that stores API config and global variables
-		var manager = FindObjectOfType<CoreExampleManager>();
+		var manager = FindFirstObjectByType<CoreExampleManager>();
 
 		// Access the initialized Phantasma API instance
 		var api = manager.phantasmaAPI;

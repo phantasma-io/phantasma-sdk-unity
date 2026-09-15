@@ -8,7 +8,7 @@ public class Example02_PublicKeyFromPrivate : MonoBehaviour
 	public void Run()
 	{
 		// Get reference to the scene-wide manager that stores API config and global variables
-		var manager = FindObjectOfType<CoreExampleManager>();
+		var manager = FindFirstObjectByType<CoreExampleManager>();
 
 		// Loaded private key - must be set in the Unity inspector before extracting public key
 		var keys = manager.keys;

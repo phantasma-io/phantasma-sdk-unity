@@ -11,7 +11,7 @@ public class Example05_SendToken : MonoBehaviour
 	public void Run()
 	{
 		// Get reference to the scene-wide manager that stores API config and global variables
-		var manager = FindObjectOfType<CoreExampleManager>();
+		var manager = FindFirstObjectByType<CoreExampleManager>();
 
 		var keys = manager.keys;
 

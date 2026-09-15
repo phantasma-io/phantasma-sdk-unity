@@ -18,7 +18,7 @@ public class Example10_WaitIncomingTx_ReadBlocks : MonoBehaviour
 	public void Run()
 	{
 		// Get reference to the scene-wide manager that stores API config and global variables
-		var manager = FindObjectOfType<CoreExampleManager>();
+		var manager = FindFirstObjectByType<CoreExampleManager>();
 
 		// Address to monitor - configured in the Unity inspector
 		var address = manager.TestAddress;
@@ -30,7 +30,7 @@ public class Example10_WaitIncomingTx_ReadBlocks : MonoBehaviour
 	// Coroutine that scans blocks by height and processes TokenReceive events for the specified address
 	private IEnumerator WaitIncomingTransfers(string address)
 	{
-		var manager = FindObjectOfType<CoreExampleManager>();
+		var manager = FindFirstObjectByType<CoreExampleManager>();
 		var api = manager.phantasmaAPI;
 
 		const string chain = "main";

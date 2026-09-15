@@ -10,7 +10,7 @@ public class Example06_CheckTransactionState : MonoBehaviour
 	public void Run()
 	{
 		// Get reference to the scene-wide manager that stores API config and global variables
-		var manager = FindObjectOfType<CoreExampleManager>();
+		var manager = FindFirstObjectByType<CoreExampleManager>();
 
 		// Access the initialized Phantasma API instance
 		var api = manager.phantasmaAPI;
@@ -27,7 +27,7 @@ public class Example06_CheckTransactionState : MonoBehaviour
 	// If we could not determine state of tx, null will be passed as first callback argument
 	public static IEnumerator CheckTxStateLoop(string txHash, Action<ExecutionState?, string, string> callback)
 	{
-		var manager = FindObjectOfType<CoreExampleManager>();
+		var manager = FindFirstObjectByType<CoreExampleManager>();
 		var api = manager.phantasmaAPI;
 
 		// Flag to stop polling loop once the transaction is finalized

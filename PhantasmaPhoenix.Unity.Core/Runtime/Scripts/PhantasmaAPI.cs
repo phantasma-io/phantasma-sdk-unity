@@ -5,6 +5,8 @@ using System.Text;
 using PhantasmaPhoenix.Cryptography;
 using PhantasmaPhoenix.Protocol.Carbon;
 using PhantasmaPhoenix.Protocol.Carbon.Blockchain;
+using PhantasmaPhoenix.Protocol.Carbon.Blockchain.Modules;
+using PhantasmaPhoenix.Protocol.Carbon.Blockchain.TxHelpers;
 using PhantasmaPhoenix.RPC.Models;
 using PhantasmaPhoenix.RPC.Types;
 using PhantasmaPhoenix.Unity.Core.Logging;
@@ -1479,36 +1481,177 @@ namespace PhantasmaPhoenix.Unity.Core
 		}
 
 		/// <summary>
-		/// Signs, serializes and broadcasts a carbon transaction
+		/// Signs a carbon transaction with one key and broadcasts it
 		/// </summary>
+		/// <remarks>
+		/// A message that carries no gas offer is planned first. The overload that takes several keys
+		/// describes how.
+		/// </remarks>
 		/// <param name="keys">Key pair used to sign the Carbon transaction.</param>
-		/// <param name="txMsg">Carbon TxMsg value to sign and serialize.</param>
+		/// <param name="txMsg">Carbon TxMsg value to plan, sign and serialize.</param>
 		/// <param name="callback">Callback invoked with transaction hash text and encoded transaction.</param>
-		/// <param name="errorHandlingCallback">Callback invoked with SDK error type and message when signing or broadcast fails.</param>
+		/// <param name="errorHandlingCallback">Callback invoked with SDK error type and message when planning, signing or broadcast fails.</param>
 		/// <param name="timeout">Request timeout in seconds.</param>
 		/// <param name="retries">Number of retry attempts.</param>
-		/// <returns>Coroutine that signs, serializes, and broadcasts a Carbon transaction.</returns>
+		/// <returns>Coroutine that plans, signs, serializes, and broadcasts a Carbon transaction.</returns>
 		public IEnumerator SignAndSendCarbonTransaction(IKeyPair keys, TxMsg txMsg, Action<string /*tx hash*/, string /*encoded tx*/> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
+		{
+			return SignAndSendCarbonTransaction(new[] { keys }, txMsg, null, callback, errorHandlingCallback, timeout: timeout, retries: retries);
+		}
+
+		/// <summary>
+		/// Plans the fee of a carbon transaction, signs it with every key it needs, and broadcasts it
+		/// </summary>
+		/// <remarks>
+		/// A message whose maxGas is zero is priced against the chain's current gas configuration before it
+		/// is signed. The chain refuses an offer of zero, and it aborts a transaction that spends more than
+		/// it offered. A message whose maxGas the caller already set is signed as it is.
+		/// <para>
+		/// A token creation is also checked against the chain first. Its symbol is asked for, because the
+		/// call spends the policy fee before the contract looks at the symbol. That fee is the largest
+		/// single price in the protocol, and a symbol that is already taken pays it for nothing.
+		/// </para>
+		/// </remarks>
+		/// <param name="keys">One key pair per witness the transaction needs. A gas-payer transfer takes the gas payer and the owner, in any order.</param>
+		/// <param name="txMsg">Carbon TxMsg value to plan, sign and serialize.</param>
+		/// <param name="options">Fee planning options, for example the expiry, or what a burned NFT holds. Null takes the defaults.</param>
+		/// <param name="callback">Callback invoked with transaction hash text and encoded transaction.</param>
+		/// <param name="errorHandlingCallback">Callback invoked with SDK error type and message when the pre-flight refuses the transaction, or when planning, signing or broadcast fails.</param>
+		/// <param name="preflight">True asks the chain whether the symbol of a token creation is already taken, before anything is signed. It does not affect any other message.</param>
+		/// <param name="timeout">Request timeout in seconds.</param>
+		/// <param name="retries">Number of retry attempts.</param>
+		/// <returns>Coroutine that plans, signs, serializes, and broadcasts a Carbon transaction.</returns>
+		public IEnumerator SignAndSendCarbonTransaction(IKeyPair[] keys, TxMsg txMsg, PlanAndSignOptions options, Action<string /*tx hash*/, string /*encoded tx*/> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, bool preflight = true, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
 		{
 			Log.Write("Sending carbon transaction...");
 
-			var signedTxMsg = new SignedTxMsg
+			// The pre-flight needs the gas token id out of the gas configuration, so a token creation reads
+			// that configuration as well, and not only a message that still has to be priced.
+			var createTokenSymbol = preflight ? CreateTokenSymbol(txMsg) : null;
+
+			GasConfig? config = null;
+			if (txMsg.maxGas == 0 || createTokenSymbol != null)
 			{
-				msg = txMsg,
-				witnesses = new Witness[] {
-				new Witness
+				yield return GetGasConfig(result =>
 				{
-					address = new Bytes32(keys.PublicKey),
-					signature = new Bytes64(Ed25519.Sign(CarbonBlob.Serialize(txMsg), keys.PrivateKey))
+					// Every failure leaves config null. Planning against a zero configuration would offer zero
+					// gas, and the chain refuses that offer.
+					if (result == null)
+					{
+						errorHandlingCallback?.Invoke(EPHANTASMA_SDK_ERROR_TYPE.MALFORMED_RESPONSE, "getGasConfig returned no result");
+						return;
+					}
+
+					try
+					{
+						config = result.ToGasConfig();
+					}
+					catch (Exception error)
+					{
+						errorHandlingCallback?.Invoke(EPHANTASMA_SDK_ERROR_TYPE.MALFORMED_RESPONSE, error.Message);
+					}
+				}, errorHandlingCallback, timeout, retries);
+
+				if (config == null)
+					yield break;
+			}
+
+			if (createTokenSymbol != null)
+			{
+				string refusal = null;
+				yield return PreflightCreateToken(createTokenSymbol, config.Value.gasTokenId, reason => refusal = reason, timeout, retries);
+
+				if (refusal != null)
+				{
+					errorHandlingCallback?.Invoke(EPHANTASMA_SDK_ERROR_TYPE.API_ERROR, refusal);
+					yield break;
 				}
 			}
-			};
 
-			var signedTxBytes = CarbonBlob.Serialize(signedTxMsg);
-			var encoded = Base16.Encode(signedTxBytes);
+			string encoded = null;
+			try
+			{
+				// PlanAndSign reads the gas offer out of the message. A message the caller priced is signed as
+				// it is, and the configuration is not used.
+				encoded = Base16.Encode(PlanAndSign.WithKeys(txMsg, keys, config ?? new GasConfig(), options));
+			}
+			catch (Exception error)
+			{
+				// The planner refuses a message it cannot price, for example a burn whose infusions were not
+				// given. The signer refuses a key set that does not match the witnesses the message names.
+				errorHandlingCallback?.Invoke(EPHANTASMA_SDK_ERROR_TYPE.API_ERROR, error.Message);
+			}
+
+			if (encoded == null)
+				yield break;
 
 			// Send to network and validate on callback
 			yield return SendCarbonTransaction(encoded, callback, errorHandlingCallback, timeout, retries);
+		}
+
+		// The symbol a CreateToken claims, or null when the message creates no token. A message whose
+		// arguments cannot be read as a token also answers null: the planner reads the same arguments a
+		// moment later and reports the real fault.
+		private static string CreateTokenSymbol(TxMsg msg)
+		{
+			// TxTypes.Call is zero, so a TxMsg the caller built by hand and did not finish reads as a call
+			// with no body. The type alone does not promise the body is there. Reading it as a call anyway
+			// would throw out of the coroutine, and a coroutine cannot hand an exception back to whoever
+			// started it, so the caller would get nothing at all.
+			if (msg.type != TxTypes.Call || !(msg.msg is TxMsgCall call))
+				return null;
+
+			if (call.moduleId != (uint)ModuleId.Token || call.methodId != (uint)TokenContract_Methods.CreateToken)
+				return null;
+
+			try
+			{
+				var symbol = CarbonBlob.New<TokenInfo>(call.args).symbol.data;
+				return string.IsNullOrEmpty(symbol) ? null : symbol;
+			}
+			catch (Exception)
+			{
+				return null;
+			}
+		}
+
+		// Asks the chain whether a token symbol is already in use, and reports a refusal through
+		// <paramref name="refusal"/>. Nothing is reported when the chain answered that the symbol is free.
+		//
+		// This is the rule PhantasmaPhoenix.RPC.TransactionPreflight applies in the plain .NET SDK. That
+		// helper runs on tasks, and a task cannot be driven from a coroutine, so the same two lookups are
+		// made here over this wrapper's own transport.
+		//
+		// A symbol that resolves to a token is taken. A symbol that does not resolve comes back as an
+		// ordinary RPC error, and the node reports an absent symbol, a missing method and a failed backend
+		// in the same way. So the check asks a second question whose answer it already knows: it fetches
+		// the gas token by its id, which every live chain has. A node that answers the control is serving
+		// token lookups, and its refusal about the caller's symbol is then a real absence. A node that does
+		// not answer the control has established nothing, and the transaction is refused for that reason.
+		private IEnumerator PreflightCreateToken(string symbol, ulong controlTokenId, Action<string> refusal, int timeout, int retries)
+		{
+			TokenResult token = null;
+			// An error here is the expected answer for a free symbol, so it is not reported to the caller.
+			yield return GetToken(symbol, false, 0, result => token = result, (type, message) => { }, timeout, retries);
+
+			if (token != null)
+			{
+				refusal($"Token symbol {symbol} is already taken");
+				yield break;
+			}
+
+			if (controlTokenId == 0)
+			{
+				refusal($"Could not establish whether token symbol {symbol} is taken: the chain named no gas token to check the lookup against");
+				yield break;
+			}
+
+			TokenResult control = null;
+			string controlError = null;
+			yield return GetToken(string.Empty, false, controlTokenId, result => control = result, (type, message) => controlError = message, timeout, retries);
+
+			if (control == null)
+				refusal($"Could not establish whether token symbol {symbol} is taken: {controlError ?? "the control lookup returned nothing"}");
 		}
 		#endregion
 

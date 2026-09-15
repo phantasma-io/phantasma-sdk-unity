@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using PhantasmaPhoenix.Cryptography;
@@ -1480,6 +1481,11 @@ namespace PhantasmaPhoenix.Unity.Core
 			yield return SendRawTransaction(encoded, txHash, wrappedCallback, errorHandlingCallback, timeout, retries);
 		}
 
+		// How many rows one page of an infusion query asks for, and how many pages are ever read. The
+		// page size matches the plain .NET SDK, so both read a given address in the same number of calls.
+		private const uint InfusionPageSize = 100;
+		private const int InfusionMaxPages = 1000;
+
 		/// <summary>
 		/// Signs a carbon transaction with one key and broadcasts it
 		/// </summary>
@@ -1568,6 +1574,42 @@ namespace PhantasmaPhoenix.Unity.Core
 				}
 			}
 
+			// A burn returns whatever the NFT holds at its own address, and the chain charges for every
+			// returned asset. That is chain state the message does not carry, and there is no costlier
+			// reading of it to fall back on, so a burn cannot be priced until it is read. A caller who
+			// already knows it passes it in the options, and an empty list there says the NFT holds
+			// nothing. A message the caller priced needs none of this.
+			if (txMsg.maxGas == 0 && options?.Infusions == null)
+			{
+				var burned = BurnedInstances(txMsg);
+				if (burned.Count > 0)
+				{
+					var infusions = new List<InfusedAsset>();
+					string failure = null;
+
+					foreach (var instance in burned)
+					{
+						// Every instance is read at its own address, because the fee follows each returned
+						// asset separately.
+						yield return ReadInfusedAssets(instance.TokenId, instance.InstanceId, infusions, reason => failure = reason, timeout, retries);
+
+						if (failure != null)
+							break;
+					}
+
+					if (failure != null)
+					{
+						errorHandlingCallback?.Invoke(EPHANTASMA_SDK_ERROR_TYPE.API_ERROR, failure);
+						yield break;
+					}
+
+					// The caller's own options object is never changed. Clone keeps the runtime type.
+					var planned = (PlanAndSignOptions)(options ?? new PlanAndSignOptions()).Clone();
+					planned.Infusions = infusions;
+					options = planned;
+				}
+			}
+
 			string encoded = null;
 			try
 			{
@@ -1613,6 +1655,129 @@ namespace PhantasmaPhoenix.Unity.Core
 			{
 				return null;
 			}
+		}
+
+		// The instances a message burns, or an empty list when it burns none. A message whose body cannot
+		// be read as its type promises answers empty: the planner reads the same body a moment later and
+		// reports the real fault through the error callback.
+		private static IReadOnlyList<(ulong TokenId, ulong InstanceId)> BurnedInstances(TxMsg msg)
+		{
+			try
+			{
+				return FeePlanner.BurnedInstances(msg);
+			}
+			catch (Exception)
+			{
+				return Array.Empty<(ulong, ulong)>();
+			}
+		}
+
+		// Adds what NFT <paramref name="instanceId"/> of token <paramref name="tokenId"/> holds at its
+		// own address to <paramref name="assets"/>, in the form the fee planner prices. A failure is
+		// reported through <paramref name="failure"/> and nothing is added.
+		//
+		// This is what PhantasmaPhoenix.RPC.PhantasmaAPI.InfusedAssetsAsync reads in the plain .NET SDK.
+		// That method runs on tasks, and a task cannot be driven from a coroutine, so the same queries
+		// are made here over this wrapper's own transport.
+		//
+		// A fungible balance is resolved to a token id, because rows of the chain's gas and data tokens
+		// are free and only the id tells which token a row belongs to. Whether the burner already holds
+		// a returned token is left at the costlier reading, which moves the escrow ceiling alone.
+		private IEnumerator ReadInfusedAssets(ulong tokenId, ulong instanceId, List<InfusedAsset> assets, Action<string> failure, int timeout, int retries)
+		{
+			var address = TokenHelper.GetNftAddress(tokenId, instanceId).ToHex();
+			var found = new List<InfusedAsset>();
+
+			var balances = new List<BalanceResult>();
+			string reason = null;
+			yield return ReadAllPages<BalanceResult>(
+				(cursor, page, error) => GetAccountFungibleTokens(address, string.Empty, 0, InfusionPageSize, cursor, false, RpcAddressType.Carbon, page, error, timeout, retries),
+				balances, r => reason = r);
+
+			if (reason != null)
+			{
+				failure(reason);
+				yield break;
+			}
+
+			foreach (var balance in balances)
+			{
+				TokenResult token = null;
+				yield return GetToken(balance.Symbol, result => token = result, (type, message) => reason = message, timeout, retries);
+
+				if (token == null)
+				{
+					failure($"Could not read what the burned NFT holds: getToken returned nothing for {balance.Symbol}" + (reason == null ? "" : ": " + reason));
+					yield break;
+				}
+
+				found.Add(new InfusedAsset { TokenId = ulong.Parse(token.CarbonId, CultureInfo.InvariantCulture), NonFungible = false });
+			}
+
+			var owned = new List<TokenResult>();
+			yield return ReadAllPages<TokenResult>(
+				(cursor, page, error) => GetAccountOwnedTokens(address, string.Empty, 0, InfusionPageSize, cursor, false, RpcAddressType.Carbon, page, error, timeout, retries),
+				owned, r => reason = r);
+
+			if (reason != null)
+			{
+				failure(reason);
+				yield break;
+			}
+
+			foreach (var token in owned)
+			{
+				BalanceResult balance = null;
+				yield return GetTokenBalance(address, token.Symbol, "main", false, RpcAddressType.Carbon, result => balance = result, (type, message) => reason = message, timeout, retries);
+
+				if (balance == null)
+				{
+					failure($"Could not read what the burned NFT holds: getTokenBalance returned nothing for {token.Symbol}" + (reason == null ? "" : ": " + reason));
+					yield break;
+				}
+
+				found.Add(new InfusedAsset
+				{
+					TokenId = ulong.Parse(token.CarbonId, CultureInfo.InvariantCulture),
+					NonFungible = true,
+					InstanceCount = (uint)ulong.Parse(balance.Amount, CultureInfo.InvariantCulture)
+				});
+			}
+
+			assets.AddRange(found);
+		}
+
+		// Walks a cursor-paginated query to the end and collects every item. The cursor the node returns
+		// drives the loop, and an item count never does. The loop stops on a cursor it has already seen,
+		// and it stops past the page cap, so a node that keeps handing out cursors cannot hold the
+		// coroutine forever.
+		private IEnumerator ReadAllPages<T>(Func<string, Action<CursorPaginatedResult<T[]>>, Action<EPHANTASMA_SDK_ERROR_TYPE, string>, IEnumerator> page, List<T> items, Action<string> failure)
+		{
+			var seen = new HashSet<string>();
+			var cursor = string.Empty;
+
+			for (var i = 0; i < InfusionMaxPages; i++)
+			{
+				CursorPaginatedResult<T[]> result = null;
+				string reason = null;
+				yield return page(cursor, r => result = r, (type, message) => reason = message);
+
+				if (result == null)
+				{
+					failure("Could not read what the burned NFT holds: " + (reason ?? "the query returned nothing"));
+					yield break;
+				}
+
+				if (result.Result != null)
+					items.AddRange(result.Result);
+
+				if (string.IsNullOrEmpty(result.Cursor) || !seen.Add(result.Cursor))
+					yield break;
+
+				cursor = result.Cursor;
+			}
+
+			failure($"Could not read what the burned NFT holds: the node kept returning pages past {InfusionMaxPages}");
 		}
 
 		// Asks the chain whether a token symbol is already in use, and reports a refusal through

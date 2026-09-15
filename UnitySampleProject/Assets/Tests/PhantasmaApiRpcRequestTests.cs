@@ -915,4 +915,104 @@ public class PhantasmaApiRpcRequestTests
 		Assert.That(reported, Is.Not.Null.And.Not.Empty);
 		Assert.That(api.Methods, Does.Not.Contain("sendCarbonTransaction"));
 	}
+
+	private static TxMsg Burn(PhantasmaKeys owner, ulong tokenId = 9, ulong instanceId = 5)
+	{
+		return NativeTxHelper.BurnNonFungible(new BurnNonFungibleParams
+		{
+			From = new Bytes32(owner.PublicKey),
+			TokenId = tokenId,
+			InstanceId = instanceId
+		});
+	}
+
+	// One empty page, which is what the account queries answer for an address that holds nothing.
+	private static CursorPaginatedResult<T[]> NoPage<T>()
+	{
+		return new CursorPaginatedResult<T[]>(Array.Empty<T>(), null);
+	}
+
+	[Test]
+	public void SignAndSendCarbonTransaction_WithABurnOfAnEmptyNft_AsksTheChainThenPlans()
+	{
+		var owner = CreateDeterministicKeys(1);
+		var api = new CapturingPhantasmaApi();
+		api.Answer("getGasConfig", MainnetGasConfig());
+		api.Answer("getAccountFungibleTokens", NoPage<BalanceResult>());
+		api.Answer("getAccountOwnedTokens", NoPage<TokenResult>());
+		api.Answer("sendCarbonTransaction", "HASH");
+
+		RunCoroutine(api.SignAndSendCarbonTransaction(owner, Burn(owner), (hash, encoded) => { }, FailOnError));
+
+		// The planner refuses a burn until it is told what the NFT holds. Both queries are asked, the
+		// empty answer says it holds nothing, and only then can the message be priced.
+		Assert.That(api.Methods, Is.EqualTo(new[] { "getGasConfig", "getAccountFungibleTokens", "getAccountOwnedTokens", "sendCarbonTransaction" }));
+		Assert.That(DecodeSent(api).msg.maxGas, Is.GreaterThan(0UL));
+	}
+
+	[Test]
+	public void SignAndSendCarbonTransaction_WithAnInfusedNft_PricesWhatItHolds()
+	{
+		var owner = CreateDeterministicKeys(1);
+
+		var empty = new CapturingPhantasmaApi();
+		empty.Answer("getGasConfig", MainnetGasConfig());
+		empty.Answer("getAccountFungibleTokens", NoPage<BalanceResult>());
+		empty.Answer("getAccountOwnedTokens", NoPage<TokenResult>());
+		empty.Answer("sendCarbonTransaction", "HASH");
+		RunCoroutine(empty.SignAndSendCarbonTransaction(owner, Burn(owner), (hash, encoded) => { }, FailOnError));
+
+		var infused = new CapturingPhantasmaApi();
+		infused.Answer("getGasConfig", MainnetGasConfig());
+		// The NFT holds a fungible balance of a token that is neither the gas nor the data token, so its
+		// returned row is paid for.
+		infused.Answer("getAccountFungibleTokens", new CursorPaginatedResult<BalanceResult[]>(new[] { new BalanceResult { Symbol = "GPX" } }, null));
+		infused.Answer("getToken", new TokenResult { Symbol = "GPX", CarbonId = "7" });
+		infused.Answer("getAccountOwnedTokens", NoPage<TokenResult>());
+		infused.Answer("sendCarbonTransaction", "HASH");
+		RunCoroutine(infused.SignAndSendCarbonTransaction(owner, Burn(owner), (hash, encoded) => { }, FailOnError));
+
+		// The symbol was resolved to a token id, because the rows of the gas and data tokens are free and
+		// only the id tells which token a row belongs to.
+		Assert.That(infused.Methods, Is.EqualTo(new[] { "getGasConfig", "getAccountFungibleTokens", "getToken", "getAccountOwnedTokens", "sendCarbonTransaction" }));
+		Assert.That(infused.Parameters[2][0], Is.EqualTo("GPX"));
+		// Returning that asset to the burner costs a transfer, so the burn of an infused NFT is priced
+		// above the burn of an empty one.
+		Assert.That(DecodeSent(infused).msg.maxGas, Is.GreaterThan(DecodeSent(empty).msg.maxGas));
+	}
+
+	[Test]
+	public void SignAndSendCarbonTransaction_WithInfusionsFromTheCaller_DoesNotAskTheChain()
+	{
+		var owner = CreateDeterministicKeys(1);
+		var api = new CapturingPhantasmaApi();
+		api.Answer("getGasConfig", MainnetGasConfig());
+		api.Answer("sendCarbonTransaction", "HASH");
+
+		// A caller who already knows what the NFT holds states it. An empty list is a statement too: it
+		// says the NFT holds nothing.
+		var options = new PlanAndSignOptions { Infusions = Array.Empty<InfusedAsset>() };
+
+		RunCoroutine(api.SignAndSendCarbonTransaction(new IKeyPair[] { owner }, Burn(owner), options, (hash, encoded) => { }, FailOnError));
+
+		Assert.That(api.Methods, Is.EqualTo(new[] { "getGasConfig", "sendCarbonTransaction" }));
+	}
+
+	[Test]
+	public void SignAndSendCarbonTransaction_WhenTheInfusionQueryFails_RefusesBeforeSending()
+	{
+		var owner = CreateDeterministicKeys(1);
+		var api = new CapturingPhantasmaApi();
+		api.Answer("getGasConfig", MainnetGasConfig());
+		api.Answer("getAccountFungibleTokens", new RpcFailure("Execution failed"));
+		string reported = null;
+
+		RunCoroutine(api.SignAndSendCarbonTransaction(owner, Burn(owner), (hash, encoded) => Assert.Fail("the transaction was sent"), (errorType, message) => reported = message));
+
+		// A query that did not answer establishes nothing. Planning the burn as if the NFT held nothing
+		// would offer too little gas, and the chain aborts a transaction that spends more than it offered.
+		Assert.That(reported, Does.Contain("Could not read what the burned NFT holds"));
+		Assert.That(reported, Does.Contain("Execution failed"));
+		Assert.That(api.Methods, Does.Not.Contain("sendCarbonTransaction"));
+	}
 }

@@ -54,6 +54,39 @@ offered, and takes the whole offer for it.
 
 A message whose `maxGas` you set yourself is signed as it is, and the gas configuration is not read.
 
+## Showing the fee before the user confirms
+
+A wallet has to show what a transaction will cost, and check the balance, before it asks the user for
+a signature. `PhantasmaAPI.PlanCarbonTransaction` prices a message and signs nothing.
+
+```csharp
+FeePlan plan = null;
+
+yield return api.PlanCarbonTransaction(new IKeyPair[] { keys }, message, null,
+	result => plan = result,
+	(errorType, errorMessage) => Debug.LogError($"[{errorType}] {errorMessage}"));
+
+// plan.MaxGas is the offer the message will carry.
+// plan.ExpectedGasBill is what the chain is expected to take out of it.
+// Show those, check the balance, and only then sign.
+
+yield return api.SignAndSendCarbonTransaction(keys, plan.Apply(message),
+	(txHash, encodedTx) => Debug.Log($"Sent, hash {txHash}"),
+	(errorType, errorMessage) => Debug.LogError($"[{errorType}] {errorMessage}"));
+```
+
+`FeePlan.Apply` writes the offer into the message. The send path then signs that message as it is and
+reads nothing from the chain a second time, so the price the user approved is the price that is
+signed.
+
+Pass the same keys the message will be signed with. A `Call`, a `Call_Multi`, a `Trade` and a
+`Phantasma` message choose their own witnesses, and the length of the signed envelope depends on how
+many there are, so the price depends on the key count.
+
+The method prices the message and checks nothing else. A successful plan says the message can be
+priced. It says nothing about whether the chain will accept it, and it does not run the token
+pre-flight described below.
+
 ## Several signatures
 
 Some transactions need more than one witness. A transfer that names a gas payer needs the payer and

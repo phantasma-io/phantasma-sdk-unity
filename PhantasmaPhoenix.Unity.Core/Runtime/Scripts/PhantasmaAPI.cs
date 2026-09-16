@@ -1538,25 +1538,7 @@ namespace PhantasmaPhoenix.Unity.Core
 			GasConfig? config = null;
 			if (txMsg.maxGas == 0 || createTokenSymbol != null)
 			{
-				yield return GetGasConfig(result =>
-				{
-					// Every failure leaves config null. Planning against a zero configuration would offer zero
-					// gas, and the chain refuses that offer.
-					if (result == null)
-					{
-						errorHandlingCallback?.Invoke(EPHANTASMA_SDK_ERROR_TYPE.MALFORMED_RESPONSE, "getGasConfig returned no result");
-						return;
-					}
-
-					try
-					{
-						config = result.ToGasConfig();
-					}
-					catch (Exception error)
-					{
-						errorHandlingCallback?.Invoke(EPHANTASMA_SDK_ERROR_TYPE.MALFORMED_RESPONSE, error.Message);
-					}
-				}, errorHandlingCallback, timeout, retries);
+				yield return ReadGasConfig(result => config = result, errorHandlingCallback, timeout, retries);
 
 				if (config == null)
 					yield break;
@@ -1579,34 +1561,15 @@ namespace PhantasmaPhoenix.Unity.Core
 			// reading of it to fall back on, so a burn cannot be priced until it is read. A caller who
 			// already knows it passes it in the options, and an empty list there says the NFT holds
 			// nothing. A message the caller priced needs none of this.
-			if (txMsg.maxGas == 0 && options?.Infusions == null)
+			if (txMsg.maxGas == 0)
 			{
-				var burned = BurnedInstances(txMsg);
-				if (burned.Count > 0)
+				string failure = null;
+				yield return ResolveInfusions(txMsg, options, filled => options = filled, reason => failure = reason, timeout, retries);
+
+				if (failure != null)
 				{
-					var infusions = new List<InfusedAsset>();
-					string failure = null;
-
-					foreach (var instance in burned)
-					{
-						// Every instance is read at its own address, because the fee follows each returned
-						// asset separately.
-						yield return ReadInfusedAssets(instance.TokenId, instance.InstanceId, infusions, reason => failure = reason, timeout, retries);
-
-						if (failure != null)
-							break;
-					}
-
-					if (failure != null)
-					{
-						errorHandlingCallback?.Invoke(EPHANTASMA_SDK_ERROR_TYPE.API_ERROR, failure);
-						yield break;
-					}
-
-					// The caller's own options object is never changed. Clone keeps the runtime type.
-					var planned = (PlanAndSignOptions)(options ?? new PlanAndSignOptions()).Clone();
-					planned.Infusions = infusions;
-					options = planned;
+					errorHandlingCallback?.Invoke(EPHANTASMA_SDK_ERROR_TYPE.API_ERROR, failure);
+					yield break;
 				}
 			}
 
@@ -1657,6 +1620,153 @@ namespace PhantasmaPhoenix.Unity.Core
 			}
 		}
 
+		/// <summary>
+		/// Plans the fee of a carbon transaction against the chain's current prices, and signs nothing
+		/// </summary>
+		/// <remarks>
+		/// This is what a wallet needs before it asks the user to confirm: the plan exists before anything
+		/// is signed, so the cost can be shown and the balance checked. Apply it to the message with
+		/// <c>FeePlan.Apply</c>, and the send path then signs that message as it is.
+		/// <para>
+		/// A burn is priced from what the burned NFT holds at its own address, which is chain state the
+		/// message does not carry. A caller who states it in <paramref name="options"/> is taken at their
+		/// word, and an empty list there says the NFT holds nothing. A caller who states nothing has it
+		/// read here, over the same queries.
+		/// </para>
+		/// <para>
+		/// This is the Unity equivalent of <c>PhantasmaAPI.Fees.PlanAsync</c> in the plain .NET SDK. That
+		/// one is not usable here, see the note above <c>ReadInfusedAssets</c>.
+		/// </para>
+		/// <para>
+		/// This method prices the message and checks nothing else. A successful plan says the message can
+		/// be priced. It says nothing about whether the chain will accept it. The send path runs the
+		/// pre-flight.
+		/// </para>
+		/// </remarks>
+		/// <param name="keys">The same key set the message will be signed with. A Call, a Call_Multi, a Trade and a Phantasma message choose their own witnesses, and the size of the envelope depends on how many there are, so the price depends on this.</param>
+		/// <param name="txMsg">Carbon TxMsg value to price. The message is not changed.</param>
+		/// <param name="options">Fee planning options, for example what a burned NFT holds. Null takes the defaults.</param>
+		/// <param name="callback">Callback invoked with the plan.</param>
+		/// <param name="errorHandlingCallback">Callback invoked with SDK error type and message when the chain cannot be read or the message cannot be priced.</param>
+		/// <param name="timeout">Request timeout in seconds.</param>
+		/// <param name="retries">Number of retry attempts.</param>
+		/// <returns>Coroutine that plans the fee of a Carbon transaction.</returns>
+		public IEnumerator PlanCarbonTransaction(IKeyPair[] keys, TxMsg txMsg, PlanAndSignOptions options, Action<FeePlan> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
+		{
+			if (keys == null)
+			{
+				errorHandlingCallback?.Invoke(EPHANTASMA_SDK_ERROR_TYPE.API_ERROR, "Pass the keys the message will be signed with: the price depends on how many witnesses sign it");
+				yield break;
+			}
+
+			GasConfig? config = null;
+			yield return ReadGasConfig(result => config = result, errorHandlingCallback, timeout, retries);
+
+			if (config == null)
+				yield break;
+
+			string failure = null;
+			yield return ResolveInfusions(txMsg, options, filled => options = filled, reason => failure = reason, timeout, retries);
+
+			if (failure != null)
+			{
+				errorHandlingCallback?.Invoke(EPHANTASMA_SDK_ERROR_TYPE.API_ERROR, failure);
+				yield break;
+			}
+
+			FeePlan plan = null;
+			try
+			{
+				plan = FeePlanner.Plan(txMsg, config.Value, PlanOptionsFor(txMsg, keys, options));
+			}
+			catch (Exception error)
+			{
+				// The planner refuses a message it cannot price.
+				errorHandlingCallback?.Invoke(EPHANTASMA_SDK_ERROR_TYPE.API_ERROR, error.Message);
+			}
+
+			if (plan != null)
+				callback?.Invoke(plan);
+		}
+
+		// The planning options a message and its key set imply.
+		//
+		// Only the witness-array types take their witness count from the caller: Call, Call_Multi, Trade
+		// and Phantasma. Every other type fixes its own slots in the message, and one key may fill two of
+		// them, so a count would contradict the message.
+		//
+		// PlanAndSign.WithKeys applies this same rule before it plans, and the two have to stay equal. A
+		// plan sized for fewer witnesses than the signature carries offers too little gas, and the chain
+		// bills the whole offer when a transaction runs past what it offered. The test
+		// PlanCarbonTransaction_ForACallMulti_PlansWhatTheSendPathWillSign fails if they ever diverge.
+		private static PlanAndSignOptions PlanOptionsFor(TxMsg txMsg, IKeyPair[] keys, PlanAndSignOptions options)
+		{
+			var planned = (PlanAndSignOptions)(options ?? new PlanAndSignOptions()).Clone();
+
+			if (!planned.WitnessCount.HasValue && SignedTxMsg.RequiredWitnesses(txMsg) == null)
+				planned.WitnessCount = keys.Length;
+
+			return planned;
+		}
+
+		// The chain's gas configuration, or null when it could not be read. Every failure reports through
+		// <paramref name="errorHandlingCallback"/> and leaves the result null. Planning against a zero
+		// configuration would offer zero gas, and the chain refuses that offer.
+		private IEnumerator ReadGasConfig(Action<GasConfig?> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback, int timeout, int retries)
+		{
+			yield return GetGasConfig(result =>
+			{
+				if (result == null)
+				{
+					errorHandlingCallback?.Invoke(EPHANTASMA_SDK_ERROR_TYPE.MALFORMED_RESPONSE, "getGasConfig returned no result");
+					return;
+				}
+
+				try
+				{
+					callback(result.ToGasConfig());
+				}
+				catch (Exception error)
+				{
+					errorHandlingCallback?.Invoke(EPHANTASMA_SDK_ERROR_TYPE.MALFORMED_RESPONSE, error.Message);
+				}
+			}, errorHandlingCallback, timeout, retries);
+		}
+
+		// Options with <c>Infusions</c> filled in from the chain when the message burns an NFT and the
+		// caller did not state them. The caller's own options object is never changed, and the options are
+		// passed through untouched when there is nothing to read.
+		private IEnumerator ResolveInfusions(TxMsg txMsg, PlanAndSignOptions options, Action<PlanAndSignOptions> callback, Action<string> failure, int timeout, int retries)
+		{
+			if (options?.Infusions != null)
+				yield break;
+
+			var burned = BurnedInstances(txMsg);
+			if (burned.Count == 0)
+				yield break;
+
+			var infusions = new List<InfusedAsset>();
+			string reason = null;
+
+			foreach (var instance in burned)
+			{
+				// Every instance is read at its own address, because the fee follows each returned asset
+				// separately.
+				yield return ReadInfusedAssets(instance.TokenId, instance.InstanceId, infusions, r => reason = r, timeout, retries);
+
+				if (reason != null)
+				{
+					failure(reason);
+					yield break;
+				}
+			}
+
+			// Clone keeps the runtime type, so the caller's object is left as it was.
+			var filled = (PlanAndSignOptions)(options ?? new PlanAndSignOptions()).Clone();
+			filled.Infusions = infusions;
+			callback(filled);
+		}
+
 		// Returns the instances a message burns, or an empty list when it burns none. A message whose
 		// body cannot be read as its type promises also returns an empty list. The planner reads the same
 		// body a moment later and reports the real fault through the error callback.
@@ -1677,8 +1787,10 @@ namespace PhantasmaPhoenix.Unity.Core
 		// reported through <paramref name="failure"/> and nothing is added.
 		//
 		// This is what PhantasmaPhoenix.RPC.PhantasmaAPI.InfusedAssetsAsync reads in the plain .NET SDK.
-		// That method runs on tasks, and a task cannot be driven from a coroutine, so the same queries
-		// are made here over this wrapper's own transport.
+		// That class is not reused here because it carries its own HttpClient transport. This wrapper
+		// exists so that every request goes through UnityWebRequest, which is the transport that works on
+		// every Unity target, WebGL included. So the same queries are made here over this wrapper's own
+		// transport instead.
 		//
 		// A fungible balance is resolved to a token id, because rows of the chain's gas and data tokens
 		// are free and only the id tells which token a row belongs to. Whether the burner already holds

@@ -6,6 +6,7 @@ using NUnit.Framework;
 using PhantasmaPhoenix.Cryptography;
 using PhantasmaPhoenix.Protocol.Carbon;
 using PhantasmaPhoenix.Protocol.Carbon.Blockchain;
+using PhantasmaPhoenix.Protocol.Carbon.Blockchain.Modules;
 using PhantasmaPhoenix.Protocol.Carbon.Blockchain.Modules.Builders;
 using PhantasmaPhoenix.Protocol.Carbon.Blockchain.TxHelpers;
 using PhantasmaPhoenix.RPC.Models;
@@ -1014,5 +1015,157 @@ public class PhantasmaApiRpcRequestTests
 		Assert.That(reported, Does.Contain("Could not read what the burned NFT holds"));
 		Assert.That(reported, Does.Contain("Execution failed"));
 		Assert.That(api.Methods, Does.Not.Contain("sendCarbonTransaction"));
+	}
+
+	[Test]
+	public void PlanCarbonTransaction_ForABurn_PricesItWithoutSigning()
+	{
+		var owner = CreateDeterministicKeys(1);
+		var api = new CapturingPhantasmaApi();
+		api.Answer("getGasConfig", MainnetGasConfig());
+		api.Answer("getAccountFungibleTokens", new CursorPaginatedResult<BalanceResult[]>(new[] { new BalanceResult { Symbol = "GPX" } }, null));
+		api.Answer("getToken", new TokenResult { Symbol = "GPX", CarbonId = "7" });
+		api.Answer("getAccountOwnedTokens", NoPage<TokenResult>());
+		FeePlan plan = null;
+
+		RunCoroutine(api.PlanCarbonTransaction(new IKeyPair[] { owner }, Burn(owner), null, result => plan = result, FailOnError));
+
+		// A wallet has to show what a burn costs before the user confirms it, so the plan must exist with
+		// nothing signed and nothing broadcast.
+		Assert.That(plan, Is.Not.Null);
+		Assert.That(plan.MaxGas, Is.GreaterThan(0UL));
+		Assert.That(api.Methods, Is.EqualTo(new[] { "getGasConfig", "getAccountFungibleTokens", "getToken", "getAccountOwnedTokens" }));
+	}
+
+	[Test]
+	public void PlanCarbonTransaction_AppliedToTheMessage_IsWhatTheSendPathSigns()
+	{
+		var owner = CreateDeterministicKeys(1);
+
+		var quoting = new CapturingPhantasmaApi();
+		quoting.Answer("getGasConfig", MainnetGasConfig());
+		quoting.Answer("getAccountFungibleTokens", NoPage<BalanceResult>());
+		quoting.Answer("getAccountOwnedTokens", NoPage<TokenResult>());
+		FeePlan plan = null;
+		RunCoroutine(quoting.PlanCarbonTransaction(new IKeyPair[] { owner }, Burn(owner), null, result => plan = result, FailOnError));
+
+		var sending = new CapturingPhantasmaApi();
+		sending.Answer("sendCarbonTransaction", "HASH");
+		RunCoroutine(sending.SignAndSendCarbonTransaction(owner, plan.Apply(Burn(owner)), (hash, encoded) => { }, FailOnError));
+
+		// The quote is the price that is signed, and the message carries its own offer by then, so the
+		// send path reads nothing from the chain a second time.
+		Assert.That(DecodeSent(sending).msg.maxGas, Is.EqualTo(plan.MaxGas));
+		Assert.That(sending.Methods, Is.EqualTo(new[] { "sendCarbonTransaction" }));
+	}
+
+	[Test]
+	public void PlanCarbonTransaction_WhenTheInfusionQueryFails_PlansNothing()
+	{
+		var owner = CreateDeterministicKeys(1);
+		var api = new CapturingPhantasmaApi();
+		api.Answer("getGasConfig", MainnetGasConfig());
+		api.Answer("getAccountFungibleTokens", new RpcFailure("Execution failed"));
+		FeePlan plan = null;
+		string reported = null;
+
+		RunCoroutine(api.PlanCarbonTransaction(new IKeyPair[] { owner }, Burn(owner), null, result => plan = result, (errorType, message) => reported = message));
+
+		// A quote built on an unread NFT would under-offer, and the chain bills the whole offer when a
+		// burn aborts. No plan is better than a wrong one.
+		Assert.That(plan, Is.Null);
+		Assert.That(reported, Does.Contain("Could not read what the burned NFT holds"));
+	}
+
+	// The wallet's own multi-burn shape: a Call_Multi of Token.BurnNonFungible calls. It is a
+	// witness-array type, so its envelope size, and therefore its price, depends on how many keys sign.
+	private static TxMsg BurnBatch(PhantasmaKeys owner, int count, ulong tokenId = 9)
+	{
+		var calls = new TxMsgCall[count];
+		for (var i = 0; i < count; i++)
+		{
+			calls[i] = new TxMsgCall
+			{
+				moduleId = (uint)ModuleId.Token,
+				methodId = (uint)TokenContract_Methods.BurnNonFungible,
+				args = CarbonBlob.Serialize(new BurnNonFungibleArgs
+				{
+					tokenId = tokenId,
+					from = new Bytes32(owner.PublicKey),
+					instanceIds = new[] { (ulong)(11 + i) }
+				})
+			};
+		}
+
+		return new TxMsg
+		{
+			type = TxTypes.Call_Multi,
+			gasFrom = new Bytes32(owner.PublicKey),
+			// The native builders set this too. A default TxMsg leaves the payload's string null, and
+			// serializing the envelope to measure it then throws.
+			payload = SmallString.Empty,
+			msg = new TxMsgCall_Multi { calls = calls }
+		};
+	}
+
+	private static void AnswerEmptyInfusions(CapturingPhantasmaApi api, int instances)
+	{
+		for (var i = 0; i < instances; i++)
+		{
+			api.Answer("getAccountFungibleTokens", NoPage<BalanceResult>());
+			api.Answer("getAccountOwnedTokens", NoPage<TokenResult>());
+		}
+	}
+
+	[Test]
+	public void PlanCarbonTransaction_ForACallMulti_PlansWhatTheSendPathWillSign()
+	{
+		var owner = CreateDeterministicKeys(1);
+		var second = CreateDeterministicKeys(2);
+		var keys = new IKeyPair[] { owner, second };
+
+		var quoting = new CapturingPhantasmaApi();
+		quoting.Answer("getGasConfig", MainnetGasConfig());
+		AnswerEmptyInfusions(quoting, 2);
+		FeePlan plan = null;
+		RunCoroutine(quoting.PlanCarbonTransaction(keys, BurnBatch(owner, 2), null, result => plan = result, FailOnError));
+
+		var sending = new CapturingPhantasmaApi();
+		sending.Answer("getGasConfig", MainnetGasConfig());
+		AnswerEmptyInfusions(sending, 2);
+		sending.Answer("sendCarbonTransaction", "HASH");
+		RunCoroutine(sending.SignAndSendCarbonTransaction(keys, BurnBatch(owner, 2), null, (hash, encoded) => { }, FailOnError));
+
+		// A Call_Multi chooses its own witnesses, so the planner cannot price it without knowing how
+		// many sign. The caller passed no WitnessCount, and both paths have to derive the same one from
+		// the same key set. A quote that sized a smaller envelope than the signature carries would offer
+		// too little gas, and the chain bills the whole offer when a transaction runs past its offer.
+		Assert.That(plan, Is.Not.Null, "the wallet's own multi-burn shape must be plannable with no options");
+		var sent = DecodeSent(sending);
+		Assert.That(sent.witnesses.Length, Is.EqualTo(2));
+		Assert.That(sent.msg.maxGas, Is.EqualTo(plan.MaxGas));
+	}
+
+	[Test]
+	public void PlanCarbonTransaction_ForACallMulti_PricesMoreWitnessesHigher()
+	{
+		var owner = CreateDeterministicKeys(1);
+		var second = CreateDeterministicKeys(2);
+
+		FeePlan one = null;
+		var single = new CapturingPhantasmaApi();
+		single.Answer("getGasConfig", MainnetGasConfig());
+		AnswerEmptyInfusions(single, 1);
+		RunCoroutine(single.PlanCarbonTransaction(new IKeyPair[] { owner }, BurnBatch(owner, 1), null, result => one = result, FailOnError));
+
+		FeePlan two = null;
+		var pair = new CapturingPhantasmaApi();
+		pair.Answer("getGasConfig", MainnetGasConfig());
+		AnswerEmptyInfusions(pair, 1);
+		RunCoroutine(pair.PlanCarbonTransaction(new IKeyPair[] { owner, second }, BurnBatch(owner, 1), null, result => two = result, FailOnError));
+
+		// A second witness makes the envelope longer, and gas model v2 bills the envelope. A plan that
+		// ignored the key set would return the same figure twice.
+		Assert.That(two.MaxGas, Is.GreaterThan(one.MaxGas));
 	}
 }

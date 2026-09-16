@@ -1631,9 +1631,9 @@ namespace PhantasmaPhoenix.Unity.Core
 			yield return SendCarbonTransaction(encoded, callback, errorHandlingCallback, timeout, retries);
 		}
 
-		// The symbol a CreateToken claims, or null when the message creates no token. A message whose
-		// arguments cannot be read as a token also answers null: the planner reads the same arguments a
-		// moment later and reports the real fault.
+		// Returns the symbol a CreateToken claims, or null when the message creates no token. A message
+		// whose arguments cannot be read as a token also returns null. The planner reads the same
+		// arguments a moment later and reports the real fault.
 		private static string CreateTokenSymbol(TxMsg msg)
 		{
 			// TxTypes.Call is zero, so a TxMsg the caller built by hand and did not finish reads as a call
@@ -1657,9 +1657,9 @@ namespace PhantasmaPhoenix.Unity.Core
 			}
 		}
 
-		// The instances a message burns, or an empty list when it burns none. A message whose body cannot
-		// be read as its type promises answers empty: the planner reads the same body a moment later and
-		// reports the real fault through the error callback.
+		// Returns the instances a message burns, or an empty list when it burns none. A message whose
+		// body cannot be read as its type promises also returns an empty list. The planner reads the same
+		// body a moment later and reports the real fault through the error callback.
 		private static IReadOnlyList<(ulong TokenId, ulong InstanceId)> BurnedInstances(TxMsg msg)
 		{
 			try
@@ -1747,10 +1747,10 @@ namespace PhantasmaPhoenix.Unity.Core
 			assets.AddRange(found);
 		}
 
-		// Walks a cursor-paginated query to the end and collects every item. The cursor the node returns
-		// drives the loop, and an item count never does. The loop stops on a cursor it has already seen,
-		// and it stops past the page cap, so a node that keeps handing out cursors cannot hold the
-		// coroutine forever.
+		// Walks a cursor-paginated query to the end and collects every item. Each page is asked for with
+		// the cursor the node returned for the page before it. The loop stops on an empty cursor, on a
+		// cursor it has already seen, and at the page cap. A node that keeps handing out fresh cursors
+		// therefore cannot hold the coroutine forever.
 		private IEnumerator ReadAllPages<T>(Func<string, Action<CursorPaginatedResult<T[]>>, Action<EPHANTASMA_SDK_ERROR_TYPE, string>, IEnumerator> page, List<T> items, Action<string> failure)
 		{
 			var seen = new HashSet<string>();
@@ -1784,8 +1784,10 @@ namespace PhantasmaPhoenix.Unity.Core
 		// <paramref name="refusal"/>. Nothing is reported when the chain answered that the symbol is free.
 		//
 		// This is the rule PhantasmaPhoenix.RPC.TransactionPreflight applies in the plain .NET SDK. That
-		// helper runs on tasks, and a task cannot be driven from a coroutine, so the same two lookups are
-		// made here over this wrapper's own transport.
+		// helper is not reused here because it reads through a PhantasmaAPI that carries its own
+		// HttpClient transport. This wrapper exists so that every request goes through UnityWebRequest,
+		// which is the transport that works on every Unity target, WebGL included. So the same two
+		// lookups are made here over this wrapper's own transport instead.
 		//
 		// A symbol that resolves to a token is taken. A symbol that does not resolve comes back as an
 		// ordinary RPC error, and the node reports an absent symbol, a missing method and a failed backend

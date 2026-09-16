@@ -27,7 +27,7 @@ And that's it, just build for Android, you're done!
 # Sending a transaction
 
 `PhantasmaAPI.SignAndSendCarbonTransaction` plans the fee, signs and broadcasts in one call. Build the
-message with the helpers of `PhantasmaPhoenix.Protocol.Carbon`, then hand it over.
+message with the helpers of `PhantasmaPhoenix.Protocol.Carbon`, then pass it to that method.
 
 ```csharp
 var api = new PhantasmaAPI("https://testnet.phantasma.info/rpc");
@@ -49,15 +49,15 @@ StartCoroutine(api.SignAndSendCarbonTransaction(keys, message,
 ## The fee
 
 A message whose `maxGas` is zero is priced against the chain's current gas configuration before it is
-signed. The chain refuses an offer of zero, and it aborts a transaction that spends more than it
-offered, so the offer has to be right.
+signed. The chain refuses an offer of zero. It also aborts a transaction that spends more gas than it
+offered, and takes the whole offer for it.
 
 A message whose `maxGas` you set yourself is signed as it is, and the gas configuration is not read.
 
 ## Several signatures
 
 Some transactions need more than one witness. A transfer that names a gas payer needs the payer and
-the owner. Pass one key per witness, in any order, and the overload that takes options:
+the owner. Use the overload that takes an array of keys, with one key per witness, in any order:
 
 ```csharp
 StartCoroutine(api.SignAndSendCarbonTransaction(
@@ -69,7 +69,8 @@ StartCoroutine(api.SignAndSendCarbonTransaction(
 ## Creating a token
 
 A token creation spends the policy fee before the contract looks at the symbol, and that fee is the
-largest single price in the protocol. Sending a symbol that is already taken pays it for nothing.
+largest single price in the protocol. A creation whose symbol is already taken spends that fee and
+creates no token.
 
 So a token creation is checked against the chain first. The symbol is looked up, and a symbol that
 resolves to a token is refused before anything is signed. A symbol that does not resolve comes back as

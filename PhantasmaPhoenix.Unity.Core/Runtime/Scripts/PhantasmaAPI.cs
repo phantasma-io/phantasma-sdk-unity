@@ -1944,15 +1944,5 @@ namespace PhantasmaPhoenix.Unity.Core
 			return (key.StartsWith("L", false, CultureInfo.InvariantCulture) ||
 					key.StartsWith("K", false, CultureInfo.InvariantCulture)) && key.Length == 52;
 		}
-
-		/// <summary>
-		/// Validates the format of a Phantasma address string
-		/// </summary>
-		/// <param name="address">Phantasma address text.</param>
-		/// <returns>True when the address starts with P and has Phantasma address length.</returns>
-		public static bool IsValidAddress(string address)
-		{
-			return address.StartsWith("P", false, CultureInfo.InvariantCulture) && address.Length == 45;
-		}
 	}
 }

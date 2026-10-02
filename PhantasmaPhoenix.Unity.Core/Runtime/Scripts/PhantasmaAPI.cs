@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
+using PhantasmaPhoenix.Core;
 using PhantasmaPhoenix.Cryptography;
 using PhantasmaPhoenix.Protocol.Carbon;
 using PhantasmaPhoenix.Protocol.Carbon.Blockchain;
@@ -1435,11 +1436,15 @@ namespace PhantasmaPhoenix.Unity.Core
 		/// <param name="errorHandlingCallback">Callback invoked with SDK error type and message when signing or broadcast fails.</param>
 		/// <param name="timeout">Request timeout in seconds.</param>
 		/// <param name="retries">Number of retry attempts.</param>
+		/// <param name="expiration">Moment the transaction stops being admissible. Default
+		/// <see cref="TxLimits.DefaultExpiryMs"/> from now, the same lifetime a Carbon transaction gets. A flow
+		/// with a person in it should take the chain's own window instead, see
+		/// <see cref="TxLimits.ExpiryWithin"/>.</param>
 		/// <returns>Coroutine that builds, signs, broadcasts, and verifies a transaction.</returns>
-		public IEnumerator SignAndSendTransaction(IKeyPair keys, string nexus, byte[] script, string chain, string payload, Action<string /*tx hash*/, string /*encoded tx*/> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
+		public IEnumerator SignAndSendTransaction(IKeyPair keys, string nexus, byte[] script, string chain, string payload, Action<string /*tx hash*/, string /*encoded tx*/> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries, Timestamp? expiration = null)
 		{
 			var payloadBytes = string.IsNullOrEmpty(payload) ? Array.Empty<byte>() : Encoding.UTF8.GetBytes(payload);
-			return SignAndSendTransaction(keys, nexus, script, chain, payloadBytes, callback, errorHandlingCallback, null, timeout, retries);
+			return SignAndSendTransaction(keys, nexus, script, chain, payloadBytes, callback, errorHandlingCallback, null, timeout, retries, expiration);
 		}
 
 		/// <summary>
@@ -1455,12 +1460,20 @@ namespace PhantasmaPhoenix.Unity.Core
 		/// <param name="customSignFunction">Optional custom signer that receives data, script bytes, and payload bytes.</param>
 		/// <param name="timeout">Request timeout in seconds.</param>
 		/// <param name="retries">Number of retry attempts.</param>
+		/// <param name="expiration">Moment the transaction stops being admissible. Default
+		/// <see cref="TxLimits.DefaultExpiryMs"/> from now, the same lifetime a Carbon transaction gets. A flow
+		/// with a person in it should take the chain's own window instead, see
+		/// <see cref="TxLimits.ExpiryWithin"/>.</param>
 		/// <returns>Coroutine that builds, signs, broadcasts, and verifies a transaction.</returns>
-		public IEnumerator SignAndSendTransaction(IKeyPair keys, string nexus, byte[] script, string chain, byte[] payload, Action<string /*tx hash*/, string /*encoded tx*/> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, Func<byte[], byte[], byte[], byte[]> customSignFunction = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries)
+		public IEnumerator SignAndSendTransaction(IKeyPair keys, string nexus, byte[] script, string chain, byte[] payload, Action<string /*tx hash*/, string /*encoded tx*/> callback, Action<EPHANTASMA_SDK_ERROR_TYPE, string> errorHandlingCallback = null, Func<byte[], byte[], byte[], byte[]> customSignFunction = null, int timeout = WebClient.DefaultTimeout, int retries = WebClient.DefaultRetries, Timestamp? expiration = null)
 		{
 			Log.Write("Sending transaction... script size: " + script.Length);
 
-			var tx = new PhantasmaPhoenix.Protocol.Transaction(nexus, chain, script, DateTime.UtcNow + TimeSpan.FromMinutes(20), payload ?? Array.Empty<byte>());
+			// This transaction carries its expiration in seconds. TxLimits counts in the milliseconds the
+			// chain reads on the Carbon path, and both paths are admitted by the same check.
+			var tx = new PhantasmaPhoenix.Protocol.Transaction(
+				nexus, chain, script, expiration ?? new Timestamp((uint)(TxLimits.DefaultExpiry() / 1000)),
+				payload ?? Array.Empty<byte>());
 
 			// Local hash we expect to see on the node
 			Hash txHash = tx.Sign(keys, customSignFunction);

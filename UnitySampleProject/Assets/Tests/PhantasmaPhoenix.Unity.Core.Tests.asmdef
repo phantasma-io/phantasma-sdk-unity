@@ -5,8 +5,10 @@
   ],
   "precompiledReferences": [
     "Newtonsoft.Json.dll",
+    "PhantasmaPhoenix.Core.dll",
     "PhantasmaPhoenix.Cryptography.dll",
     "PhantasmaPhoenix.Protocol.Carbon.dll",
+    "PhantasmaPhoenix.Protocol.dll",
     "PhantasmaPhoenix.RPC.dll"
   ],
   "optionalUnityReferences": [

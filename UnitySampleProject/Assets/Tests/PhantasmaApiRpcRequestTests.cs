@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using Newtonsoft.Json;
 using NUnit.Framework;
+using PhantasmaPhoenix.Core;
 using PhantasmaPhoenix.Cryptography;
 using PhantasmaPhoenix.Protocol.Carbon;
 using PhantasmaPhoenix.Protocol.Carbon.Blockchain;
@@ -685,6 +686,60 @@ public class PhantasmaApiRpcRequestTests
 		Assert.That(api.LastMethod, Is.EqualTo("sendRawTransaction"));
 		Assert.That(api.LastParameters, Has.Length.EqualTo(1));
 		Assert.That(api.LastParameters[0], Is.TypeOf<string>());
+	}
+
+	// A chain refuses an expiry at or beyond its own window, and that window can be as short as the
+	// node default. A script transaction and a Carbon transaction pass the same check. So a script
+	// transaction gets the Carbon lifetime when the caller names none. The script transaction counts
+	// its expiration in seconds, and TxLimits counts in milliseconds.
+	[Test]
+	public void SignAndSendTransaction_WithoutExpiration_StampsCarbonDefaultLifetime()
+	{
+		var api = new CapturingPhantasmaApi();
+		var lifetimeSeconds = (uint)(TxLimits.DefaultExpiryMs / 1000);
+
+		var before = Timestamp.Now.Value;
+		RunCoroutine(api.SignAndSendTransaction(
+			CreateDeterministicKeys(),
+			"mainnet",
+			Array.Empty<byte>(),
+			"main",
+			Array.Empty<byte>(),
+			(_, _) => { },
+			(_, _) => { }));
+		var after = Timestamp.Now.Value;
+
+		Assert.That(BroadcastExpiration(api), Is.InRange(before + lifetimeSeconds, after + lifetimeSeconds));
+	}
+
+	// The text-payload overload passes the expiration on to the binary one. This test fails when
+	// either overload drops the caller's value.
+	[Test]
+	public void SignAndSendTransaction_WithExpiration_StampsThatExpiration()
+	{
+		var api = new CapturingPhantasmaApi();
+		var expiration = new Timestamp(1_900_000_000);
+
+		RunCoroutine(api.SignAndSendTransaction(
+			CreateDeterministicKeys(),
+			"mainnet",
+			Array.Empty<byte>(),
+			"main",
+			string.Empty,
+			(_, _) => { },
+			(_, _) => { },
+			expiration: expiration));
+
+		Assert.That(BroadcastExpiration(api), Is.EqualTo(expiration.Value));
+	}
+
+	/// <summary>Returns the expiration of the transaction that the coroutine passed to
+	/// sendRawTransaction.</summary>
+	private static uint BroadcastExpiration(CapturingPhantasmaApi api)
+	{
+		Assert.That(api.LastMethod, Is.EqualTo("sendRawTransaction"));
+		var tx = PhantasmaPhoenix.Protocol.Transaction.Unserialize(Base16.Decode((string)api.LastParameters[0]));
+		return tx.Expiration.Value;
 	}
 
 	[Test]
